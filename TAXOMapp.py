@@ -1,8 +1,9 @@
 import streamlit as st
 import pandas as pd
+from graphviz import Digraph
 
 st.set_page_config(page_title="Flowchart Builder to CSV", layout="wide")
-st.title("🛠️ Flowchart Builder → CSV Exporter")
+st.title("🛠️ Flowchart Builder → CSV + Diagram")
 
 # Step 1: Super Node
 super_node = st.text_input("Enter the Super-node (main category)", value="science")
@@ -26,9 +27,8 @@ for i in range(level1_count):
         level2_map[subject] = subtopics
 
 # Step 3: Preview Structure
-st.subheader("📄 Preview Structure")
+st.subheader("📄 Preview CSV Data Structure")
 
-# Handle custom formatting:
 child_level_1_str = " $$ ".join(level1_nodes)
 child_level_2_parts = []
 for subject in level1_nodes:
@@ -39,14 +39,34 @@ for subject in level1_nodes:
         child_level_2_parts.append("")  # No subtopics for this subject
 child_level_2_str = " $$ ".join(child_level_2_parts)
 
-# Show final string
-st.code(f"{super_node}\t{child_level_1_str}\t{child_level_2_str}", language="text")
+csv_content = f"{super_node}\t{child_level_1_str}\t{child_level_2_str}"
+st.code(csv_content, language="text")
 
-# Step 4: Export to CSV
+# Step 4: Download CSV
 st.subheader("⬇️ Download CSV")
-
-def generate_csv_content():
-    return f"{super_node}\t{child_level_1_str}\t{child_level_2_str}"
-
-csv_data = generate_csv_content().encode('utf-8')
+csv_data = csv_content.encode('utf-8')
 st.download_button("Download CSV", data=csv_data, file_name="flowchart.csv", mime="text/csv")
+
+# Step 5: Flowchart Visualization
+st.subheader("📊 Flowchart Preview")
+
+def generate_flowchart(super_node, level1_nodes, level2_map):
+    dot = Digraph(comment="Flowchart", format='png')
+    dot.attr(rankdir='LR', size='10')
+
+    dot.node(super_node, super_node, shape='box', style='filled', fillcolor='lightblue')
+
+    for subject in level1_nodes:
+        dot.node(subject, subject, shape='ellipse', style='filled', fillcolor='lightgreen')
+        dot.edge(super_node, subject)
+
+        subtopics = level2_map.get(subject, [])
+        for topic in subtopics:
+            node_id = f"{subject}_{topic}".replace(" ", "_")
+            dot.node(node_id, topic, shape='note', style='filled', fillcolor='lightyellow')
+            dot.edge(subject, node_id)
+
+    return dot
+
+flowchart = generate_flowchart(super_node, level1_nodes, level2_map)
+st.graphviz_chart(flowchart.source)
