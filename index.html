@@ -362,42 +362,42 @@
       };
     }
 
- function convertHierarchyToCSV(hierarchy) {
-      const rows = [];
-    
-      function traverse(node, path) {
-        path.push(node);
-        const children = hierarchy.nodes[node]?.children;
-        if (!children || children.length === 0) {
-          // Leaf node → push full path as a CSV row
-          rows.push([...path]);
-        } else {
-          children.forEach(child => traverse(child, [...path])); // clone path
-        }
-      }
-    
-      hierarchy.roots.forEach(root => {
-        traverse(root, []);
-      });
-    
-      // Build final CSV string
-      const formattedRows = rows.map(path => {
-        // Build levels
-        const level1 = path[0] || "null";  // Subject
-        const level2 = path[1] || "null";  // Topic
-        const level3 = path[2] || "null";  // Subtopic
-        const level4 = path[3] || "null";  // Sub-subtopic
-    
-        return [
-          level1,
-          level1 + " $$ " + (path[1] || "null"),
-          (path[1] || "null") + " @@ " + (path[2] || "null"),
-          (path[2] || "null") + " ^^ " + (path[3] || "null")
-        ].join("\t");
-      });
-    
-      return formattedRows.join("\n");
+function convertHierarchyToCSV(hierarchy) {
+  const rows = [];
+
+  function traverse(node, path) {
+    path.push(node);
+    const children = hierarchy.nodes[node]?.children;
+    if (!children || children.length === 0) {
+      // Leaf node → push full path as a CSV row
+      rows.push([...path]);
+    } else {
+      children.forEach(child => traverse(child, [...path])); // clone path
     }
+  }
+
+  hierarchy.roots.forEach(root => {
+    traverse(root, []);
+  });
+
+  // Build final CSV string
+  const formattedRows = rows.map(path => {
+    // Build levels
+    const level1 = path[0] || "null";  // Subject
+    const level2 = path[1] || "null";  // Topic
+    const level3 = path[2] || "null";  // Subtopic
+    const level4 = path[3] || "null";  // Sub-subtopic
+
+    return [
+      level1,
+      level1 + " $$ " + (path[1] || "null"),
+      (path[1] || "null") + " @@ " + (path[2] || "null"),
+      (path[2] || "null") + " ^^ " + (path[3] || "null")
+    ].join("\t");
+  });
+
+  return formattedRows.join("\n");
+}
 
 
     function downloadCSV() {
