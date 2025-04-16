@@ -2,6 +2,7 @@ import streamlit as st
 from graphviz import Digraph
 import tempfile
 from pathlib import Path
+from PIL import Image
 
 st.set_page_config(page_title="CSV to Flowchart", layout="wide")
 st.title("🔁 CSV → Flowchart Diagram (HD Export)")
@@ -71,15 +72,18 @@ if csv_input:
 
         dot = generate_graph(super_node, level1_nodes, level2_map, level3_map)
 
-        # Show Flowchart in Streamlit
-        st.subheader("📊 Flowchart Preview")
-        st.graphviz_chart(dot.source)
-
-        # Export HD PNG
-        st.subheader("⬇️ Download High-Quality Diagram (600 DPI)")
+        # Export HD PNG and show small preview
         with tempfile.TemporaryDirectory() as tmpdirname:
             path = Path(tmpdirname) / "flowchart"
             dot.render(str(path), format="png", cleanup=True)
+
+            # Show small preview
+            st.subheader("🖼️ Preview (Small Thumbnail)")
+            img = Image.open(f"{path}.png")
+            st.image(img, width=300)  # Smaller display size
+
+            # Download button
+            st.subheader("⬇️ Download High-Quality Diagram (600 DPI)")
             with open(f"{path}.png", "rb") as f:
                 st.download_button(
                     label="📥 Download HD Flowchart PNG",
