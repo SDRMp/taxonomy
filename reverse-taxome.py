@@ -2,7 +2,7 @@ import streamlit as st
 from graphviz import Digraph
 
 st.set_page_config(page_title="CSV to Flowchart", layout="wide")
-st.title("🔁 CSV → Flowchart")
+st.title("🔁 CSV → Flowchart (with HD export)")
 
 st.markdown("Upload or paste a CSV-style row (single line) below:")
 
@@ -40,51 +40,37 @@ if st.button("📊 Generate Flowchart"):
                 level3_map[subject] = topic_map
 
             # Generate the flowchart
-            def generate_graph(super_node, level1_nodes, level2_map, level3_map, display_mode=False):
+            def generate_graph(super_node, level1_nodes, level2_map, level3_map):
                 dot = Digraph(comment="Flowchart", format='png')
                 dot.attr(dpi=str(dpi))
-                
-                if display_mode:
-                    # Smaller display settings
-                    dot.attr(rankdir='LR', size='0.1', ratio='compress')
-                    dot.attr(nodesep='0.2', ranksep='0.3')
-                    fontsize = '10'
-                else:
-                    # HD export settings
-                    dot.attr(rankdir='LR', size='10')
-                    fontsize = '14'
-                
-                dot.node(super_node, super_node, shape='box', style='filled', fillcolor='lightblue', fontsize=fontsize)
+                dot.attr(rankdir='LR', size='10')
+                dot.node(super_node, super_node, shape='box', style='filled', fillcolor='lightblue')
 
                 for subject in level1_nodes:
-                    dot.node(subject, subject, shape='ellipse', style='filled', fillcolor='lightgreen', fontsize=fontsize)
+                    dot.node(subject, subject, shape='ellipse', style='filled', fillcolor='lightgreen')
                     dot.edge(super_node, subject)
 
                     subtopics = level2_map.get(subject, [])
                     for topic in subtopics:
                         topic_id = f"{subject}_{topic}".replace(" ", "_")
-                        dot.node(topic_id, topic, shape='note', style='filled', fillcolor='lightyellow', fontsize=fontsize)
+                        dot.node(topic_id, topic, shape='note', style='filled', fillcolor='lightyellow')
                         dot.edge(subject, topic_id)
 
                         sub_subs = level3_map.get(subject, {}).get(topic, [])
                         for sub in sub_subs:
                             sub_id = f"{topic_id}_{sub}".replace(" ", "_")
-                            dot.node(sub_id, sub, shape='component', style='filled', fillcolor='mistyrose', fontsize=fontsize)
+                            dot.node(sub_id, sub, shape='component', style='filled', fillcolor='mistyrose')
                             dot.edge(topic_id, sub_id)
                 return dot
 
-            # Display smaller version
-            small_flowchart = generate_graph(super_node, level1_nodes, level2_map, level3_map, display_mode=True)
-            st.graphviz_chart(small_flowchart.source, use_container_width=True)
+            flowchart = generate_graph(super_node, level1_nodes, level2_map, level3_map)
+            st.graphviz_chart(flowchart.source)
 
-            # Generate HD version for download
-            hd_flowchart = generate_graph(super_node, level1_nodes, level2_map, level3_map)
-            
             # Save to file
             output_path = "/tmp/flowchart_hd"
-            hd_flowchart.render(output_path, cleanup=True)
+            flowchart.render(output_path, cleanup=True)
             with open(f"{output_path}.png", "rb") as f:
                 st.download_button("⬇️ Download HD Flowchart (PNG)", data=f, file_name="flowchart_hd.png", mime="image/png")
 
     except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
+        st.error(f"Something went wrong while parsing or generating: {e}")
