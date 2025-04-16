@@ -2,18 +2,14 @@ import streamlit as st
 from graphviz import Digraph
 
 st.set_page_config(page_title="CSV to Flowchart", layout="wide")
-st.title("🔁 CSV → Flowchart (with HD export)")
+st.title("🔁 CSV → Flowchart")
 
 st.markdown("Upload or paste a CSV-style row (single line) below:")
 
 input_csv = st.text_area("📋 Paste your CSV row here:", height=150,
                          value="Education\tSubject1 $$ Subject2\tTopic1 @@ Topic2 $$ Topic1 @@ Topic2\tSub1 ^^ Sub2 @@ Sub1 ^^ Sub2 $$ Sub1 ^^ Sub2 @@ Sub1 ^^ Sub2")
 
-col1, col2 = st.columns(2)
-with col1:
-    dpi = st.slider("🖨️ Export DPI (higher = better quality)", min_value=100, max_value=600, value=300, step=50)
-with col2:
-    display_scale = st.slider("🖥️ Display Scale (smaller = fits screen)", min_value=0.001, max_value= 0.01, value=0.5, step=0.1)
+dpi = st.slider("🖨️ Export DPI (higher = better quality)", min_value=100, max_value=600, value=300, step=50)
 
 if st.button("📊 Generate Flowchart"):
     try:
@@ -44,38 +40,45 @@ if st.button("📊 Generate Flowchart"):
                 level3_map[subject] = topic_map
 
             # Generate the flowchart
-            def generate_graph(super_node, level1_nodes, level2_map, level3_map, scale=1.0):
+            def generate_graph(super_node, level1_nodes, level2_map, level3_map, display_mode=False):
                 dot = Digraph(comment="Flowchart", format='png')
                 dot.attr(dpi=str(dpi))
-                dot.attr(rankdir='LR')
-                dot.attr(size=str(scale))  # Control the size of the displayed graph
-                dot.node(super_node, super_node, shape='box', style='filled', fillcolor='lightblue')
+                
+                if display_mode:
+                    # Smaller display settings
+                    dot.attr(rankdir='LR', size='5', ratio='compress')
+                    dot.attr(nodesep='0.2', ranksep='0.3')
+                    fontsize = '10'
+                else:
+                    # HD export settings
+                    dot.attr(rankdir='LR', size='10')
+                    fontsize = '14'
+                
+                dot.node(super_node, super_node, shape='box', style='filled', fillcolor='lightblue', fontsize=fontsize)
 
                 for subject in level1_nodes:
-                    dot.node(subject, subject, shape='ellipse', style='filled', fillcolor='lightgreen')
+                    dot.node(subject, subject, shape='ellipse', style='filled', fillcolor='lightgreen', fontsize=fontsize)
                     dot.edge(super_node, subject)
 
                     subtopics = level2_map.get(subject, [])
                     for topic in subtopics:
                         topic_id = f"{subject}_{topic}".replace(" ", "_")
-                        dot.node(topic_id, topic, shape='note', style='filled', fillcolor='lightyellow')
+                        dot.node(topic_id, topic, shape='note', style='filled', fillcolor='lightyellow', fontsize=fontsize)
                         dot.edge(subject, topic_id)
 
                         sub_subs = level3_map.get(subject, {}).get(topic, [])
                         for sub in sub_subs:
                             sub_id = f"{topic_id}_{sub}".replace(" ", "_")
-                            dot.node(sub_id, sub, shape='component', style='filled', fillcolor='mistyrose')
+                            dot.node(sub_id, sub, shape='component', style='filled', fillcolor='mistyrose', fontsize=fontsize)
                             dot.edge(topic_id, sub_id)
                 return dot
 
             # Display smaller version
-            st.subheader("Preview (Scaled Down)")
-            small_flowchart = generate_graph(super_node, level1_nodes, level2_map, level3_map, scale=display_scale)
+            small_flowchart = generate_graph(super_node, level1_nodes, level2_map, level3_map, display_mode=True)
             st.graphviz_chart(small_flowchart.source, use_container_width=True)
 
             # Generate HD version for download
-            st.subheader("HD Download Version")
-            hd_flowchart = generate_graph(super_node, level1_nodes, level2_map, level3_map, scale=1.0)
+            hd_flowchart = generate_graph(super_node, level1_nodes, level2_map, level3_map)
             
             # Save to file
             output_path = "/tmp/flowchart_hd"
