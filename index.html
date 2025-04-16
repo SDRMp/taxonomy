@@ -370,39 +370,57 @@
         // Get all subjects (direct children of root)
         const subjects = hierarchy.nodes[root]?.children || [];
         
-        // Get all topics (children of subjects) with parent info
-        const topicsWithParents = [];
+        // For each subject, get its topics
+        const subjectTopicGroups = [];
         subjects.forEach(subject => {
           const topics = hierarchy.nodes[subject]?.children || [];
-          topics.forEach(topic => {
-            topicsWithParents.push({
-              name: topic,
-              parent: subject
-            });
-          });
+          subjectTopicGroups.push(topics);
         });
         
-        // Get all subtopics (children of topics) with parent info
-        const subtopicsWithParents = [];
-        topicsWithParents.forEach(topicObj => {
-          const subtopics = hierarchy.nodes[topicObj.name]?.children || [];
-          subtopics.forEach(subtopic => {
-            subtopicsWithParents.push({
-              name: subtopic,
-              parent: topicObj.name,
-              grandparent: topicObj.parent
-            });
+        // For each topic group (per subject), get subtopics
+        const topicSubtopicsGroups = [];
+        subjectTopicGroups.forEach(topics => {
+          const topicSubtopics = [];
+          topics.forEach(topic => {
+            const subtopics = hierarchy.nodes[topic]?.children || [];
+            topicSubtopics.push(subtopics);
           });
+          topicSubtopicsGroups.push(topicSubtopics);
         });
-
-        // Build the row with the correct format
-        const row = [
-          root,
-          subjects.join(" $$ ") || "null",
-          topicsWithParents.map(t => t.name + "@@" + t.parent).join(" $$ ") || "null",
-          subtopicsWithParents.map(st => st.name + "^^" + st.parent + "@@" + st.grandparent).join(" $$ ") || "null"
-        ];
-
+        
+        // Build subjects string (Level 1)
+        const subjectsStr = subjects.join(" $$ ") || "null";
+        
+        // Build topics string (Level 2)
+        let topicsStr = "";
+        subjectTopicGroups.forEach((topics, i) => {
+          if (i > 0) topicsStr += " $$ ";
+          topicsStr += topics.join(" @@ ") || "null";
+        });
+        if (topicsStr === "") topicsStr = "null";
+        
+        // Build subtopics string (Level 3)
+        let subtopicsStr = "";
+        topicSubtopicsGroups.forEach((topicSubtopics, subjectIndex) => {
+          if (subjectIndex > 0) subtopicsStr += " $$ ";
+          
+          if (topicSubtopics.length === 0) {
+            subtopicsStr += "null";
+            return;
+          }
+          
+          let topicSubtopicsStr = "";
+          topicSubtopics.forEach((subtopics, topicIndex) => {
+            if (topicIndex > 0) topicSubtopicsStr += " @@ ";
+            topicSubtopicsStr += subtopics.join(" ^^ ") || "null";
+          });
+          
+          subtopicsStr += topicSubtopicsStr;
+        });
+        if (subtopicsStr === "") subtopicsStr = "null";
+        
+        // Build the row
+        const row = [root, subjectsStr, topicsStr, subtopicsStr];
         rows.push(row.join("\t"));
       });
 
@@ -467,7 +485,7 @@
               // Split hierarchical values
               const items = value.split(/\s*\$\$\s*|\s*@@\s*|\s*\^\^\s*/).filter(Boolean);
               items.forEach(item => {
-                if (!wordCategories[headers[colIndex]].includes(item)) {
+                if (item !== "null" && !wordCategories[headers[colIndex]].includes(item)) {
                   wordCategories[headers[colIndex]].push(item);
                   allWords.push(item);
                 }
