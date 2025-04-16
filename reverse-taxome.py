@@ -46,7 +46,7 @@ if st.button("📊 Generate Flowchart"):
                 
                 if display_mode:
                     # Smaller display settings
-                    dot.attr(rankdir='LR', size='5', ratio='compress')
+                    dot.attr(rankdir='LR', size='0.1', ratio='compress')
                     dot.attr(nodesep='0.2', ranksep='0.3')
                     fontsize = '10'
                 else:
