@@ -263,4 +263,269 @@
     }
   </script>
 </body>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>🧱 Editable Flowchart Builder</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/drawflow/dist/drawflow.min.css">
+  <style>
+    body { font-family: sans-serif; margin: 0; padding: 0; }
+    #drawflow {
+      height: 70vh;
+      width: 100%;
+      border: 2px solid #ccc;
+      background: #f5f5f5;
+    }
+    .node {
+      padding: 10px;
+      border-radius: 10px;
+      background-color: white;
+      border: 1px solid #999;
+      text-align: center;
+      cursor: pointer;
+      min-width: 80px;
+    }
+    .controls {
+      padding: 10px;
+      background: #f0f0f0;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    button {
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+    textarea {
+      width: 100%;
+      height: 120px;
+      font-family: monospace;
+      margin-top: 10px;
+    }
+    .word-buckets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      padding: 10px;
+      background: #f9f9f9;
+      margin-bottom: 10px;
+    }
+    .word-bucket {
+      background: #e0e0e0;
+      padding: 5px 10px;
+      border-radius: 15px;
+      cursor: pointer;
+    }
+    .word-bucket:hover {
+      background: #d0d0d0;
+    }
+    .add-word {
+      display: flex;
+      gap: 5px;
+      padding: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="controls">
+    <button onclick="addNode()">➕ Add Node</button>
+    <button onclick="deleteSelectedNode()">❌ Delete Selected</button>
+    <button onclick="exportCSV()">📄 Copy CSV</button>
+    <button onclick="downloadCSV()">⬇️ Download CSV</button>
+    <button onclick="document.getElementById('csvFile').click()">📁 Import CSV</button>
+    <input type="file" id="csvFile" accept=".csv" style="display:none" onchange="importCSV(event)">
+  </div>
+
+  <div class="add-word">
+    <input type="text" id="newWord" placeholder="New word">
+    <button onclick="addWordToBuckets()">Add Word</button>
+  </div>
+
+  <div class="word-buckets" id="wordBuckets"></div>
+
+  <div id="drawflow"></div>
+
+  <h3>📄 Exported CSV</h3>
+  <textarea id="csvOutput" readonly></textarea>
+
+  <script src="https://cdn.jsdelivr.net/npm/drawflow"></script>
+  <script>
+    const editor = new Drawflow(document.getElementById("drawflow"));
+    editor.start();
+    let nodeId = 1;
+    let words = [];
+
+    // Initialize word buckets
+    function updateWordBuckets() {
+      const container = document.getElementById('wordBuckets');
+      container.innerHTML = '';
+      words.forEach(word => {
+        const bucket = document.createElement('div');
+        bucket.className = 'word-bucket';
+        bucket.textContent = word;
+        bucket.onclick = () => addNode(word);
+        container.appendChild(bucket);
+      });
+    }
+
+    function addWordToBuckets() {
+      const newWord = document.getElementById('newWord').value.trim();
+      if (newWord && !words.includes(newWord)) {
+        words.push(newWord);
+        updateWordBuckets();
+        document.getElementById('newWord').value = '';
+      }
+    }
+
+    function createNodeElement(label, id) {
+      const div = document.createElement("div");
+      div.className = "node";
+      div.innerText = label;
+      div.contentEditable = true;
+      div.onblur = () => {
+        const data = editor.getNodeFromId(id);
+        data.data.label = div.innerText;
+      };
+      return div;
+    }
+
+    function addNode(label) {
+      if (!label) {
+        label = prompt("Enter node label:", `Node ${nodeId}`);
+        if (!label) return;
+      }
+      
+      const htmlNode = createNodeElement(label, nodeId);
+      editor.addNode(
+        "node", 1, 1,
+        100 + nodeId * 30, 100 + nodeId * 20,
+        "node", { label },
+        htmlNode.outerHTML
+      );
+      nodeId++;
+    }
+
+    function deleteSelectedNode() {
+      const selected = editor.selected_node;
+      if (selected) {
+        editor.removeNodeId(selected);
+      } else {
+        alert("Select a node to delete.");
+      }
+    }
+
+    function exportCSV() {
+      const data = editor.export();
+      const nodes = data.drawflow.Home.data;
+
+      const rows = [];
+      // Add header
+      rows.push("Source,Target");
+      
+      for (const id in nodes) {
+        const node = nodes[id];
+        const label = node.data.label || "";
+        const outputs = node.outputs || {};
+
+        for (const out in outputs) {
+          outputs[out].connections.forEach(conn => {
+            const targetNode = nodes[conn.node];
+            const targetLabel = targetNode?.data?.label || "Unknown";
+            rows.push(`"${label}","${targetLabel}"`);
+          });
+        }
+      }
+
+      const csv = rows.join("\n");
+      document.getElementById("csvOutput").value = csv;
+      return csv;
+    }
+
+    function downloadCSV() {
+      const csv = exportCSV();
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "flowchart.csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    function importCSV(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const content = e.target.result;
+        // Clear existing nodes
+        editor.clear();
+        nodeId = 1;
+        words = [];
+        
+        // Process CSV content
+        const lines = content.split('\n');
+        const connections = [];
+        
+        // Skip header if exists
+        const startLine = lines[0].toLowerCase().includes('source') ? 1 : 0;
+        
+        for (let i = startLine; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          
+          // Simple CSV parsing (handles quoted values)
+          const parts = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+          if (parts.length < 2) continue;
+          
+          const source = parts[0].replace(/^"|"$/g, '').trim();
+          const target = parts[1].replace(/^"|"$/g, '').trim();
+          
+          if (source && !words.includes(source)) words.push(source);
+          if (target && !words.includes(target)) words.push(target);
+          
+          if (source && target) {
+            connections.push({source, target});
+          }
+        }
+        
+        updateWordBuckets();
+        
+        // Create nodes and connections
+        const nodeMap = {};
+        let x = 100, y = 100;
+        
+        // First create all nodes
+        words.forEach(word => {
+          const htmlNode = createNodeElement(word, nodeId);
+          editor.addNode(
+            "node", 1, 1,
+            x, y,
+            "node", { label: word },
+            htmlNode.outerHTML
+          );
+          nodeMap[word] = nodeId;
+          nodeId++;
+          x += 30;
+          y += 20;
+        });
+        
+        // Then create connections
+        connections.forEach(conn => {
+          const sourceId = nodeMap[conn.source];
+          const targetId = nodeMap[conn.target];
+          
+          if (sourceId && targetId) {
+            editor.addConnection(sourceId, targetId, "output_1", "input_1");
+          }
+        });
+      };
+      reader.readAsText(file);
+    }
+  </script>
+</body>
 </html>
