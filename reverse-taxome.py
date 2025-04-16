@@ -9,7 +9,11 @@ st.markdown("Upload or paste a CSV-style row (single line) below:")
 input_csv = st.text_area("📋 Paste your CSV row here:", height=150,
                          value="Education\tSubject1 $$ Subject2\tTopic1 @@ Topic2 $$ Topic1 @@ Topic2\tSub1 ^^ Sub2 @@ Sub1 ^^ Sub2 $$ Sub1 ^^ Sub2 @@ Sub1 ^^ Sub2")
 
-dpi = st.slider("🖨️ Export DPI (higher = better quality)", min_value=100, max_value=600, value=300, step=50)
+col1, col2 = st.columns(2)
+with col1:
+    dpi = st.slider("🖨️ Export DPI (higher = better quality)", min_value=100, max_value=600, value=300, step=50)
+with col2:
+    display_scale = st.slider("🖥️ Display Scale (smaller = fits screen)", min_value=0.1, max_value=1.0, value=0.5, step=0.1)
 
 if st.button("📊 Generate Flowchart"):
     try:
@@ -40,10 +44,11 @@ if st.button("📊 Generate Flowchart"):
                 level3_map[subject] = topic_map
 
             # Generate the flowchart
-            def generate_graph(super_node, level1_nodes, level2_map, level3_map):
+            def generate_graph(super_node, level1_nodes, level2_map, level3_map, scale=1.0):
                 dot = Digraph(comment="Flowchart", format='png')
                 dot.attr(dpi=str(dpi))
-                dot.attr(rankdir='LR', size='10')
+                dot.attr(rankdir='LR')
+                dot.attr(size=str(scale))  # Control the size of the displayed graph
                 dot.node(super_node, super_node, shape='box', style='filled', fillcolor='lightblue')
 
                 for subject in level1_nodes:
@@ -63,14 +68,20 @@ if st.button("📊 Generate Flowchart"):
                             dot.edge(topic_id, sub_id)
                 return dot
 
-            flowchart = generate_graph(super_node, level1_nodes, level2_map, level3_map)
-            st.graphviz_chart(flowchart.source)
+            # Display smaller version
+            st.subheader("Preview (Scaled Down)")
+            small_flowchart = generate_graph(super_node, level1_nodes, level2_map, level3_map, scale=display_scale)
+            st.graphviz_chart(small_flowchart.source, use_container_width=True)
 
+            # Generate HD version for download
+            st.subheader("HD Download Version")
+            hd_flowchart = generate_graph(super_node, level1_nodes, level2_map, level3_map, scale=1.0)
+            
             # Save to file
             output_path = "/tmp/flowchart_hd"
-            flowchart.render(output_path, cleanup=True)
+            hd_flowchart.render(output_path, cleanup=True)
             with open(f"{output_path}.png", "rb") as f:
                 st.download_button("⬇️ Download HD Flowchart (PNG)", data=f, file_name="flowchart_hd.png", mime="image/png")
 
     except Exception as e:
-        st.error(f"Something went wrong while parsing or generating: {e}")
+        st.error(f"An error occurred: {str(e)}")
