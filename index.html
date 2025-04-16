@@ -117,15 +117,36 @@
       background: #f0f0f0;
       border-radius: 5px;
     }
+    .output-tabs {
+      display: flex;
+      border-bottom: 1px solid #ddd;
+    }
+    .output-tab {
+      padding: 8px 15px;
+      cursor: pointer;
+      background: #eee;
+      border-right: 1px solid #ddd;
+    }
+    .output-tab.active {
+      background: #f9f9f9;
+      border-bottom: 1px solid #f9f9f9;
+      margin-bottom: -1px;
+    }
+    .output-content {
+      display: none;
+    }
+    .output-content.active {
+      display: block;
+    }
   </style>
 </head>
 <body>
 
   <div class="controls">
     <button onclick="deleteSelectedNode()">❌ Delete Selected</button>
-    <button onclick="exportCSV()">📄 Export CSV</button>
-    <button onclick="document.getElementById('csvFile').click()">📁 Import CSV</button>
-    <input type="file" id="csvFile" accept=".csv" style="display:none" onchange="importCSV(event)">
+    <button onclick="exportData()">📄 Export Data</button>
+    <button onclick="document.getElementById('dataFile').click()">📁 Import Data</button>
+    <input type="file" id="dataFile" accept=".json,.csv" style="display:none" onchange="importData(event)">
   </div>
 
   <div class="main-container">
@@ -153,11 +174,28 @@
   </div>
 
   <div class="output-container">
-    <div class="output-header">
-      <h3>📄 Exported CSV</h3>
-      <button onclick="copyCSV()">⎘ Copy</button>
+    <div class="output-tabs">
+      <div class="output-tab active" onclick="switchTab('csv')">CSV</div>
+      <div class="output-tab" onclick="switchTab('json')">JSON</div>
     </div>
-    <textarea id="csvOutput" readonly></textarea>
+    
+    <div class="output-content active" id="csvOutputContainer">
+      <div class="output-header">
+        <h3>📄 Exported CSV</h3>
+        <button onclick="copyOutput('csv')">⎘ Copy</button>
+        <button onclick="downloadOutput('csv')">💾 Download</button>
+      </div>
+      <textarea id="csvOutput" readonly></textarea>
+    </div>
+    
+    <div class="output-content" id="jsonOutputContainer">
+      <div class="output-header">
+        <h3>📄 Exported JSON</h3>
+        <button onclick="copyOutput('json')">⎘ Copy</button>
+        <button onclick="downloadOutput('json')">💾 Download</button>
+      </div>
+      <textarea id="jsonOutput" readonly></textarea>
+    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/drawflow"></script>
@@ -167,6 +205,15 @@
     let nodeId = 1;
     let wordCategories = {};
     let allWords = [];
+
+    // Tab switching
+    function switchTab(tab) {
+      document.querySelectorAll('.output-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.output-content').forEach(c => c.classList.remove('active'));
+      
+      document.querySelector(`.output-tab[onclick*="${tab}"]`).classList.add('active');
+      document.getElementById(`${tab}OutputContainer`).classList.add('active');
+    }
 
     // Initialize drag and drop
     function setupDragAndDrop() {
@@ -301,7 +348,7 @@
       }
     }
 
-    function exportCSV() {
+    function exportData() {
       const data = editor.export();
       const nodes = data.drawflow.Home.data;
       const connections = [];
@@ -323,10 +370,15 @@
 
       // Now build the hierarchy
       const hierarchy = buildHierarchy(connections);
+      
+      // Export both formats
       const csv = convertHierarchyToCSV(hierarchy);
+      const json = convertHierarchyToJSON(hierarchy);
       
       document.getElementById("csvOutput").value = csv;
-      return csv;
+      document.getElementById("jsonOutput").value = json;
+      
+      return { csv, json };
     }
 
     function buildHierarchy(connections) {
@@ -362,115 +414,253 @@
       };
     }
 
-function convertHierarchyToCSV(hierarchy) {
-  const rows = [];
+    function convertHierarchyToCSV(hierarchy) {
+      const rows = [];
 
-  function traverse(node, path) {
-    path.push(node);
-    const children = hierarchy.nodes[node]?.children;
-    if (!children || children.length === 0) {
-      // Leaf node → push full path as a CSV row
-      rows.push([...path]);
-    } else {
-      children.forEach(child => traverse(child, [...path])); // clone path
+      // Process each root branch
+      hierarchy.roots.forEach(root => {
+        const row = [];
+        let currentNodes = [root];
+        let level = 0;
+        
+        while (currentNodes.length > 0) {
+          const segment = [];
+          const nextNodes = [];
+          
+          currentNodes.forEach(node => {
+            segment.push(node);
+            if (hierarchy.nodes[node] && hierarchy.nodes[node].children) {
+              nextNodes.push(...hierarchy.nodes[node].children);
+            }
+          });
+          
+          // Add the appropriate separator based on level
+          let separator;
+          if (level === 0) separator = " $$ ";
+          else if (level === 1) separator = " @@ ";
+          else separator = " ^^ ";
+          
+          row.push(segment.join(separator));
+          currentNodes = nextNodes;
+          level++;
+        }
+        
+        rows.push(row.join("\t"));
+      });
+      
+      return rows.join("\n");
     }
-  }
 
-  hierarchy.roots.forEach(root => {
-    traverse(root, []);
-  });
+    function convertHierarchyToJSON(hierarchy) {
+      const result = {};
+      
+      hierarchy.roots.forEach(root => {
+        result[root] = {};
+        
+        // Process subjects (direct children of root)
+        const subjects = hierarchy.nodes[root]?.children || [];
+        subjects.forEach(subject => {
+          result[root][subject] = {};
+          
+          // Process topics (children of subjects)
+          const topics = hierarchy.nodes[subject]?.children || [];
+          topics.forEach(topic => {
+            // Process subtopics (children of topics)
+            const subtopics = hierarchy.nodes[topic]?.children || [];
+            result[root][subject][topic] = subtopics;
+          });
+        });
+      });
+      
+      return JSON.stringify(result, null, 2);
+    }
 
-  // Build final CSV string
-  const formattedRows = rows.map(path => {
-    // Build levels
-    const level1 = path[0] || "null";  // Subject
-    const level2 = path[1] || "null";  // Topic
-    const level3 = path[2] || "null";  // Subtopic
-    const level4 = path[3] || "null";  // Sub-subtopic
-
-    return [
-      level1,
-      level1 + " $$ " + (path[1] || "null"),
-      (path[1] || "null") + " @@ " + (path[2] || "null"),
-      (path[2] || "null") + " ^^ " + (path[3] || "null")
-    ].join("\t");
-  });
-
-  return formattedRows.join("\n");
-}
-
-
-    function downloadCSV() {
-      const csv = exportCSV();
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    function downloadOutput(format) {
+      const output = format === 'csv' 
+        ? document.getElementById("csvOutput").value 
+        : document.getElementById("jsonOutput").value;
+      
+      const extension = format === 'csv' ? 'csv' : 'json';
+      const mimeType = format === 'csv' ? 'text/csv' : 'application/json';
+      
+      const blob = new Blob([output], { type: `${mimeType};charset=utf-8;` });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "hierarchy.csv";
+      a.download = `hierarchy.${extension}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
     }
 
-    function copyCSV() {
-      exportCSV();
-      const csvOutput = document.getElementById("csvOutput");
-      csvOutput.select();
+    function copyOutput(format) {
+      exportData(); // Ensure data is up to date
+      const output = document.getElementById(`${format}Output`);
+      output.select();
       document.execCommand("copy");
-      alert("CSV copied to clipboard!");
+      alert(`${format.toUpperCase()} copied to clipboard!`);
     }
 
-    function importCSV(event) {
+    function importData(event) {
       const file = event.target.files[0];
       if (!file) return;
       
       const reader = new FileReader();
       reader.onload = function(e) {
         const content = e.target.result;
+        
         // Clear existing data
         editor.clear();
         nodeId = 1;
         wordCategories = {};
         allWords = [];
         
-        // Process CSV content
-        const lines = content.split('\n');
-        
-        // First line is headers
-        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-        
-        // Create categories from column headers
-        headers.forEach(header => {
-          wordCategories[header] = [];
-        });
-        
-        // Process data rows
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-          
-          // Simple CSV parsing (handles quoted values)
-          const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
-                            .map(v => v.trim().replace(/^"|"$/g, ''));
-          
-          values.forEach((value, colIndex) => {
-            if (value && headers[colIndex]) {
-              // Split hierarchical values
-              const items = value.split(/\s*\$\$\s*|\s*@@\s*|\s*\^\^\s*/).filter(Boolean);
-              items.forEach(item => {
-                if (!wordCategories[headers[colIndex]].includes(item)) {
-                  wordCategories[headers[colIndex]].push(item);
-                  allWords.push(item);
-                }
-              });
-            }
-          });
+        try {
+          if (file.name.endsWith('.json')) {
+            importJSON(content);
+          } else if (file.name.endsWith('.csv')) {
+            importCSV(content);
+          } else {
+            alert("Unsupported file format. Please use .json or .csv");
+          }
+        } catch (error) {
+          alert("Error importing file: " + error.message);
         }
-        
-        updateWordCategories();
       };
       reader.readAsText(file);
     }
+
+    function importJSON(jsonContent) {
+      const data = JSON.parse(jsonContent);
+      
+      // Process each root in the JSON
+      for (const [root, subjects] of Object.entries(data)) {
+        // Add root node
+        addNodeAtPosition(root, 100, 100);
+        const rootNode = editor.getNodeFromName(root);
+        
+        // Process subjects
+        for (const [subject, topics] of Object.entries(subjects)) {
+          // Add subject node
+          addNodeAtPosition(subject, 200, 200);
+          const subjectNode = editor.getNodeFromName(subject);
+          editor.addConnection(rootNode.id, subjectNode.id, "output_1", "input_1");
+          
+          // Process topics
+          for (const [topic, subtopics] of Object.entries(topics)) {
+            // Add topic node
+            addNodeAtPosition(topic, 300, 300);
+            const topicNode = editor.getNodeFromName(topic);
+            editor.addConnection(subjectNode.id, topicNode.id, "output_1", "input_1");
+            
+            // Process subtopics
+            subtopics.forEach((subtopic, i) => {
+              if (subtopic && subtopic !== "null") {
+                addNodeAtPosition(subtopic, 400 + i * 50, 400);
+                const subtopicNode = editor.getNodeFromName(subtopic);
+                editor.addConnection(topicNode.id, subtopicNode.id, "output_1", "input_1");
+              }
+            });
+          }
+        }
+      }
+      
+      // Update word categories from the imported data
+      updateWordCategoriesFromFlow();
+    }
+
+    function importCSV(csvContent) {
+      // Process CSV content
+      const lines = csvContent.split('\n');
+      
+      // First line is headers
+      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+      
+      // Create categories from column headers
+      headers.forEach(header => {
+        wordCategories[header] = [];
+      });
+      
+      // Process data rows
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        // Simple CSV parsing (handles quoted values)
+        const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
+                          .map(v => v.trim().replace(/^"|"$/g, ''));
+        
+        values.forEach((value, colIndex) => {
+          if (value && headers[colIndex]) {
+            // Split hierarchical values
+            const items = value.split(/\s*\$\$\s*|\s*@@\s*|\s*\^\^\s*/).filter(Boolean);
+            items.forEach(item => {
+              if (!wordCategories[headers[colIndex]].includes(item)) {
+                wordCategories[headers[colIndex]].push(item);
+                allWords.push(item);
+              }
+            });
+          }
+        });
+      }
+      
+      updateWordCategories();
+    }
+
+    function updateWordCategoriesFromFlow() {
+      const data = editor.export();
+      const nodes = data.drawflow.Home.data;
+      
+      // Clear existing categories
+      wordCategories = {
+        'Root': [],
+        'Subject': [],
+        'Topic': [],
+        'Subtopic': []
+      };
+      
+      // Categorize nodes by their position in the hierarchy
+      for (const id in nodes) {
+        const node = nodes[id];
+        const label = node.data.label;
+        
+        // Determine node type based on connections
+        const isRoot = !Object.values(nodes).some(n => 
+          n.outputs && Object.values(n.outputs).some(o => 
+            o.connections.some(c => c.node == id)
+        );
+        
+        if (isRoot) {
+          wordCategories['Root'].push(label);
+        } else {
+          const isSubject = Object.values(nodes).some(n => 
+            n.data.label && wordCategories['Root'].includes(n.data.label) &&
+            n.outputs && Object.values(n.outputs).some(o => 
+              o.connections.some(c => c.node == id)
+            )
+          );
+          
+          if (isSubject) {
+            wordCategories['Subject'].push(label);
+          } else {
+            const isTopic = Object.values(nodes).some(n => 
+              n.data.label && wordCategories['Subject'].includes(n.data.label) &&
+              n.outputs && Object.values(n.outputs).some(o => 
+                o.connections.some(c => c.node == id)
+              )
+            );
+            
+            if (isTopic) {
+              wordCategories['Topic'].push(label);
+            } else {
+              wordCategories['Subtopic'].push(label);
+            }
+          }
+        }
+      }
+      
+      updateWordCategories();
+    }
   </script>
 </body>
- 
+</html>
