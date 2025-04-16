@@ -28,28 +28,10 @@
       padding: 10px;
       border-radius: 10px;
       background-color: white;
-      border: 2px solid #666;
+      border: 1px solid #999;
       text-align: center;
-      cursor: move;
-      min-width: 100px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      position: relative;
-    }
-    .node.root {
-      border-color: #4CAF50;
-      background-color: #E8F5E9;
-    }
-    .node.subject {
-      border-color: #2196F3;
-      background-color: #E3F2FD;
-    }
-    .node.topic {
-      border-color: #FF9800;
-      background-color: #FFF3E0;
-    }
-    .node.subtopic {
-      border-color: #9C27B0;
-      background-color: #F3E5F5;
+      cursor: pointer;
+      min-width: 80px;
     }
     .controls {
       padding: 10px;
@@ -57,20 +39,13 @@
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
-      border-bottom: 1px solid #ddd;
     }
     button {
-      padding: 8px 12px;
+      padding: 6px 10px;
       cursor: pointer;
-      background: #fff;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
-    button:hover {
-      background: #f5f5f5;
     }
     .output-container {
-      padding: 15px;
+      padding: 10px;
       background: #f9f9f9;
       border-top: 1px solid #ddd;
     }
@@ -78,58 +53,49 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 10px;
     }
     textarea {
       width: 100%;
       height: 120px;
       font-family: monospace;
-      padding: 10px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
+      margin-top: 10px;
       resize: vertical;
     }
     .sidebar {
-      width: 300px;
+      width: 250px;
       background: #f9f9f9;
       border-left: 1px solid #ddd;
       overflow-y: auto;
-      padding: 15px;
+      padding: 10px;
       display: flex;
       flex-direction: column;
     }
     .separator-info {
       font-size: 12px;
       color: #666;
-      margin-top: 15px;
-      padding: 10px;
+      margin-top: 10px;
+      padding: 5px;
       background: #f0f0f0;
       border-radius: 5px;
-      border: 1px solid #ddd;
     }
     .hierarchy-level {
-      margin-bottom: 20px;
-      background: white;
-      padding: 10px;
-      border-radius: 5px;
-      border: 1px solid #ddd;
+      margin-bottom: 15px;
     }
     .hierarchy-level h3 {
-      margin: 0 0 10px 0;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #eee;
+      margin: 0 0 8px 0;
+      padding-bottom: 5px;
+      border-bottom: 1px solid #ddd;
       font-size: 14px;
-      color: #333;
+      color: #555;
     }
     .hierarchy-item {
       background: #e0e0e0;
-      padding: 8px 12px;
+      padding: 5px 10px;
       border-radius: 15px;
-      margin: 5px 0;
+      margin: 3px 0;
       cursor: grab;
       user-select: none;
       font-size: 13px;
-      border: 1px solid #ccc;
     }
     .hierarchy-item:hover {
       background: #d0d0d0;
@@ -138,35 +104,7 @@
       font-size: 10px;
       color: #666;
       display: block;
-      margin-top: 5px;
-      font-weight: bold;
-    }
-    .add-custom {
-      margin-top: 15px;
-      padding: 10px;
-      background: white;
-      border-radius: 5px;
-      border: 1px solid #ddd;
-    }
-    .add-custom input {
-      width: 100%;
-      padding: 8px;
-      margin-bottom: 8px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-    }
-    .add-custom button {
-      width: 100%;
-      padding: 8px;
-      background: #4CAF50;
-      color: white;
-      border: none;
-    }
-    .add-custom button:hover {
-      background: #45a049;
-    }
-    .drawflow-node.selected {
-      box-shadow: 0 0 0 2px #2196F3;
+      margin-top: 3px;
     }
   </style>
 </head>
@@ -176,6 +114,7 @@
     <button onclick="deleteSelectedNode()">❌ Delete Selected</button>
     <button onclick="exportCSV()">📄 Export CSV</button>
     <button onclick="document.getElementById('csvFile').click()">📁 Import CSV</button>
+    <button onclick="addRootNode()">➕ Add Root Node</button>
   </div>
 
   <div class="main-container">
@@ -200,18 +139,6 @@
       <div class="hierarchy-level">
         <h3>Subtopics (Level 3)</h3>
         <div id="subtopicNodes"></div>
-      </div>
-      
-      <div class="add-custom">
-        <h3>Add Custom Node</h3>
-        <select id="customNodeType">
-          <option value="root">Root</option>
-          <option value="subject">Subject</option>
-          <option value="topic">Topic</option>
-          <option value="subtopic">Subtopic</option>
-        </select>
-        <input type="text" id="customNodeName" placeholder="Node name">
-        <button onclick="addCustomNode()">Add Node</button>
       </div>
       
       <div class="separator-info">
@@ -259,7 +186,7 @@
     function addSubjectNode(name = "New Subject", parentId = null) {
       const position = getNewNodePosition();
       const htmlNode = createNodeElement(name, nodeId, "subject");
-      const node = editor.addNode(
+      editor.addNode(
         "subject", 1, 1,
         position.x, position.y,
         "subject", { label: name, type: "subject" },
@@ -272,13 +199,12 @@
       
       nodeId++;
       updateSidebar();
-      return node;
     }
     
     function addTopicNode(name = "New Topic", parentId = null) {
       const position = getNewNodePosition();
       const htmlNode = createNodeElement(name, nodeId, "topic");
-      const node = editor.addNode(
+      editor.addNode(
         "topic", 1, 1,
         position.x, position.y,
         "topic", { label: name, type: "topic" },
@@ -291,13 +217,12 @@
       
       nodeId++;
       updateSidebar();
-      return node;
     }
     
     function addSubtopicNode(name = "New Subtopic", parentId = null) {
       const position = getNewNodePosition();
       const htmlNode = createNodeElement(name, nodeId, "subtopic");
-      const node = editor.addNode(
+      editor.addNode(
         "subtopic", 1, 0,
         position.x, position.y,
         "subtopic", { label: name, type: "subtopic" },
@@ -310,48 +235,20 @@
       
       nodeId++;
       updateSidebar();
-      return node;
-    }
-    
-    function addCustomNode() {
-      const type = document.getElementById("customNodeType").value;
-      const name = document.getElementById("customNodeName").value.trim();
-      
-      if (!name) {
-        alert("Please enter a node name");
-        return;
-      }
-      
-      switch(type) {
-        case "root":
-          addRootNode(name);
-          break;
-        case "subject":
-          addSubjectNode(name);
-          break;
-        case "topic":
-          addTopicNode(name);
-          break;
-        case "subtopic":
-          addSubtopicNode(name);
-          break;
-      }
-      
-      document.getElementById("customNodeName").value = "";
     }
     
     function getNewNodePosition() {
       const nodes = Object.values(editor.getNodesFromName(""));
       const lastNode = nodes[nodes.length - 1];
       return {
-        x: lastNode ? lastNode.pos_x + 200 : 100,
+        x: lastNode ? lastNode.pos_x + 150 : 100,
         y: lastNode ? lastNode.pos_y + 100 : 100
       };
     }
     
     function createNodeElement(label, id, type) {
       const div = document.createElement("div");
-      div.className = `node ${type}`;
+      div.className = "node";
       div.innerHTML = `${label}<span class="node-type-indicator">${type}</span>`;
       div.contentEditable = true;
       div.onblur = () => {
@@ -381,19 +278,19 @@
       const subtopicNodes = nodes.filter(n => n.data.type === "subtopic");
       
       document.getElementById("rootNodes").innerHTML = rootNodes
-        .map(n => `<div class="hierarchy-item" draggable="true" data-id="${n.id}" data-type="root">${n.data.label}</div>`)
+        .map(n => `<div class="hierarchy-item" draggable="true" data-id="${n.id}">${n.data.label}</div>`)
         .join("");
       
       document.getElementById("subjectNodes").innerHTML = subjectNodes
-        .map(n => `<div class="hierarchy-item" draggable="true" data-id="${n.id}" data-type="subject">${n.data.label}</div>`)
+        .map(n => `<div class="hierarchy-item" draggable="true" data-id="${n.id}">${n.data.label}</div>`)
         .join("");
       
       document.getElementById("topicNodes").innerHTML = topicNodes
-        .map(n => `<div class="hierarchy-item" draggable="true" data-id="${n.id}" data-type="topic">${n.data.label}</div>`)
+        .map(n => `<div class="hierarchy-item" draggable="true" data-id="${n.id}">${n.data.label}</div>`)
         .join("");
       
       document.getElementById("subtopicNodes").innerHTML = subtopicNodes
-        .map(n => `<div class="hierarchy-item" draggable="true" data-id="${n.id}" data-type="subtopic">${n.data.label}</div>`)
+        .map(n => `<div class="hierarchy-item" draggable="true" data-id="${n.id}">${n.data.label}</div>`)
         .join("");
       
       setupDragAndDrop();
@@ -405,7 +302,6 @@
         item.addEventListener('dragstart', (e) => {
           e.dataTransfer.setData('text/plain', item.textContent);
           e.dataTransfer.setData('node-id', item.dataset.id);
-          e.dataTransfer.setData('node-type', item.dataset.type);
           e.dataTransfer.effectAllowed = 'copy';
         });
       });
@@ -420,7 +316,6 @@
         e.preventDefault();
         const label = e.dataTransfer.getData('text/plain');
         const nodeId = e.dataTransfer.getData('node-id');
-        const nodeType = e.dataTransfer.getData('node-type');
         
         if (nodeId) {
           const node = editor.getNodeFromId(parseInt(nodeId));
@@ -429,20 +324,10 @@
           const y = e.clientY - rect.top;
           
           // Clone the node
-          switch(nodeType) {
-            case "root":
-              addRootNode(label);
-              break;
-            case "subject":
-              addSubjectNode(label);
-              break;
-            case "topic":
-              addTopicNode(label);
-              break;
-            case "subtopic":
-              addSubtopicNode(label);
-              break;
-          }
+          if (node.data.type === "root") addRootNode(label + " (Copy)");
+          if (node.data.type === "subject") addSubjectNode(label + " (Copy)", null);
+          if (node.data.type === "topic") addTopicNode(label + " (Copy)", null);
+          if (node.data.type === "subtopic") addSubtopicNode(label + " (Copy)", null);
         }
       });
     }
@@ -519,7 +404,7 @@
           return hierarchy.nodes[subject]?.children || [];
         });
         
-        // Get subtopics grouped by their parent topics (across all subjects)
+        // Get subtopics grouped by their parent topics
         const topicSubtopicGroups = subjectTopicGroups.flatMap(topics => {
           return topics.map(topic => hierarchy.nodes[topic]?.children || []);
         });
@@ -532,23 +417,14 @@
           topics.length > 0 ? topics.join(" @@ ") : "null"
         ).join(" $$ ");
         
-        if (subjectTopicGroups.length === 0) topicLevel = "null";
-        
         // Subtopic level format: Topic1Subtopics ^^ Topic2Subtopics @@ Topic3Subtopics ^^ Topic4Subtopics
         let subtopicLevel = topicSubtopicGroups.map(subtopics => 
           subtopics.length > 0 ? subtopics.join(" ^^ ") : "null"
         ).join(" @@ ");
-        
-        if (topicSubtopicGroups.length === 0) subtopicLevel = "null";
 
         // Ensure we always have all delimiters
-        if (!topicLevel.includes("$$") && subjectTopicGroups.length > 1) {
-          topicLevel = "null $$ " + topicLevel;
-        }
-        
-        if (!subtopicLevel.includes("@@") && topicSubtopicGroups.length > 1) {
-          subtopicLevel = "null @@ " + subtopicLevel;
-        }
+        if (subjectTopicGroups.length <= 1) topicLevel = topicLevel.includes("$$") ? topicLevel : "null $$ " + topicLevel;
+        if (topicSubtopicGroups.length <= 1) subtopicLevel = subtopicLevel.includes("@@") ? subtopicLevel : "null @@ " + subtopicLevel;
 
         const row = [root, subjectLevel, topicLevel, subtopicLevel].join("\t");
         rows.push(row);
@@ -605,8 +481,8 @@
           const subjectGroups = subjectsStr.split('$$').map(s => s.trim()).filter(s => s && s !== "null");
           const subjectNodes = [];
           subjectGroups.forEach(subject => {
-            const node = addSubjectNode(subject, rootNode.id);
-            subjectNodes.push(node);
+            addSubjectNode(subject, rootNode.id);
+            subjectNodes.push(editor.getNodeFromName(subject));
           });
           
           // Process topics
@@ -617,8 +493,8 @@
             topics.forEach(topic => {
               const parentSubject = subjectNodes[groupIndex];
               if (parentSubject) {
-                const node = addTopicNode(topic, parentSubject.id);
-                topicNodes.push(node);
+                addTopicNode(topic, parentSubject.id);
+                topicNodes.push(editor.getNodeFromName(topic));
               }
             });
           });
