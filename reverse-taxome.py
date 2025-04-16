@@ -1,80 +1,92 @@
 import streamlit as st
 from graphviz import Digraph
+import tempfile
+from pathlib import Path
 
 st.set_page_config(page_title="CSV to Flowchart", layout="wide")
-st.title("🔁 CSV → Flowchart (with HD export)")
+st.title("🔁 CSV → Flowchart Diagram (HD Export)")
 
-st.markdown("Upload or paste a CSV-style row (single line) below:")
+# Instructions
+with st.expander("ℹ️ कैसे इस्तेमाल करें (How to Use)", expanded=False):
+    st.markdown("""
+    **इस ऐप के जरिए आप CSV डेटा से डायग्राम बना सकते हैं:**
 
-input_csv = st.text_area("📋 Paste your CSV row here:", height=150,
-                         value="Education\tSubject1 $$ Subject2\tTopic1 @@ Topic2 $$ Topic1 @@ Topic2\tSub1 ^^ Sub2 @@ Sub1 ^^ Sub2 $$ Sub1 ^^ Sub2 @@ Sub1 ^^ Sub2")
+    - CSV की लाइन को नीचे दिए गए फॉर्मेट में पेस्ट करें
+    - डायग्राम प्रीव्यू देखें
+    - और 600 DPI में हाई-क्वालिटी PNG डाउनलोड करें
 
-dpi = st.slider("🖨️ Export DPI (higher = better quality)", min_value=100, max_value=600, value=300, step=50)
+    **Expected Format (Tab-separated):**  
+    `Supernode` → `Subjects ($$)` → `Subtopics (@@)` → `Sub-subtopics (^^)`
+    """)
 
-show_preview = st.checkbox("📊 Flowchart Preview", value=True)
+# Input CSV Row
+csv_input = st.text_area("📋 Paste your CSV row here:", value="Education\tSubject1 $$ Subject2\tTopic1 @@ Topic2 $$ Topic1 @@ Topic2\tSub1 ^^ Sub2 @@ Sub1 ^^ Sub2 $$ Sub1 ^^ Sub2 @@ Sub1 ^^ Sub2")
 
-if st.button("📈 Generate Flowchart"):
+if csv_input:
     try:
-        # Parse the CSV line
-        parts = input_csv.strip().split("\t")
-        if len(parts) != 4:
-            st.error("CSV row must have exactly 4 tab-separated fields: Super-node, Level1, Level2, Level3")
-        else:
-            super_node = parts[0]
-            level1_nodes = parts[1].split(" $$ ")
+        # Parse CSV Line
+        parts = csv_input.strip().split("\t")
+        super_node = parts[0].strip()
+        level1_nodes = [s.strip() for s in parts[1].split("$$")]
 
-            level2_raw = parts[2].split(" $$ ")
-            level2_map = {}
-            for idx, subject in enumerate(level1_nodes):
-                subtopics = level2_raw[idx].split(" @@ ") if idx < len(level2_raw) else []
-                level2_map[subject] = subtopics
+        # Level-2
+        level2_map = {}
+        level2_groups = [grp.strip() for grp in parts[2].split("$$")]
+        for i, group in enumerate(level2_groups):
+            topics = [t.strip() for t in group.split("@@")]
+            level2_map[level1_nodes[i]] = topics
 
-            level3_raw = parts[3].split(" $$ ")
-            level3_map = {}
-            for idx, subject in enumerate(level1_nodes):
-                topic_map = {}
-                if idx < len(level3_raw):
-                    topic_chunks = level3_raw[idx].split(" @@ ")
-                    subtopics = level2_map.get(subject, [])
-                    for j, topic in enumerate(subtopics):
-                        subs = topic_chunks[j].split(" ^^ ") if j < len(topic_chunks) else []
-                        topic_map[topic] = subs
-                level3_map[subject] = topic_map
+        # Level-3
+        level3_map = {}
+        level3_groups = [grp.strip() for grp in parts[3].split("$$")]
+        for i, group in enumerate(level3_groups):
+            subsub_map = {}
+            topics = level2_map.get(level1_nodes[i], [])
+            topic_groups = [tg.strip() for tg in group.split("@@")]
+            for j, topic in enumerate(topics):
+                subs = topic_groups[j].split("^^") if j < len(topic_groups) else []
+                subsub_map[topic] = [s.strip() for s in subs]
+            level3_map[level1_nodes[i]] = subsub_map
 
-            # Generate the flowchart
-            def generate_graph(super_node, level1_nodes, level2_map, level3_map):
-                dot = Digraph(comment="Flowchart", format='png')
-                dot.attr(dpi=str(dpi))
-                dot.attr(rankdir='LR', size='10')
-                dot.node(super_node, super_node, shape='box', style='filled', fillcolor='lightblue')
+        # Build Graph
+        def generate_graph(super_node, level1_nodes, level2_map, level3_map):
+            dot = Digraph(comment="Flowchart", format='png')
+            dot.attr(dpi='600', rankdir='LR', size='10')
+            dot.node(super_node, super_node, shape='box', style='filled', fillcolor='lightblue')
 
-                for subject in level1_nodes:
-                    dot.node(subject, subject, shape='ellipse', style='filled', fillcolor='lightgreen')
-                    dot.edge(super_node, subject)
+            for subject in level1_nodes:
+                dot.node(subject, subject, shape='ellipse', style='filled', fillcolor='lightgreen')
+                dot.edge(super_node, subject)
 
-                    subtopics = level2_map.get(subject, [])
-                    for topic in subtopics:
-                        topic_id = f"{subject}_{topic}".replace(" ", "_")
-                        dot.node(topic_id, topic, shape='note', style='filled', fillcolor='lightyellow')
-                        dot.edge(subject, topic_id)
+                for topic in level2_map.get(subject, []):
+                    topic_id = f"{subject}_{topic}".replace(" ", "_")
+                    dot.node(topic_id, topic, shape='note', style='filled', fillcolor='lightyellow')
+                    dot.edge(subject, topic_id)
 
-                        sub_subs = level3_map.get(subject, {}).get(topic, [])
-                        for sub in sub_subs:
-                            sub_id = f"{topic_id}_{sub}".replace(" ", "_")
-                            dot.node(sub_id, sub, shape='component', style='filled', fillcolor='mistyrose')
-                            dot.edge(topic_id, sub_id)
-                return dot
+                    for sub in level3_map.get(subject, {}).get(topic, []):
+                        sub_id = f"{topic_id}_{sub}".replace(" ", "_")
+                        dot.node(sub_id, sub, shape='component', style='filled', fillcolor='mistyrose')
+                        dot.edge(topic_id, sub_id)
+            return dot
 
-            flowchart = generate_graph(super_node, level1_nodes, level2_map, level3_map)
+        dot = generate_graph(super_node, level1_nodes, level2_map, level3_map)
 
-            if show_preview:
-                st.graphviz_chart(flowchart.source)
+        # Show Flowchart in Streamlit
+        st.subheader("📊 Flowchart Preview")
+        st.graphviz_chart(dot.source)
 
-            # Save to file
-            output_path = "/tmp/flowchart_hd"
-            flowchart.render(output_path, cleanup=True)
-            with open(f"{output_path}.png", "rb") as f:
-                st.download_button("⬇️ Download HD Flowchart (PNG)", data=f, file_name="flowchart_hd.png", mime="image/png")
+        # Export HD PNG
+        st.subheader("⬇️ Download High-Quality Diagram (600 DPI)")
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            path = Path(tmpdirname) / "flowchart"
+            dot.render(str(path), format="png", cleanup=True)
+            with open(f"{path}.png", "rb") as f:
+                st.download_button(
+                    label="📥 Download HD Flowchart PNG",
+                    data=f,
+                    file_name="flowchart_hd.png",
+                    mime="image/png"
+                )
 
     except Exception as e:
-        st.error(f"Something went wrong while parsing or generating: {e}")
+        st.error(f"❌ Error parsing input: {e}")
