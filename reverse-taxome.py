@@ -13,84 +13,90 @@ with st.expander("ℹ️ कैसे इस्तेमाल करें (How
     **इस ऐप के जरिए आप CSV डेटा से डायग्राम बना सकते हैं:**
 
     - CSV की लाइन को नीचे दिए गए फॉर्मेट में पेस्ट करें
-    - डायग्राम प्रीव्यू देखें
+    - सिर्फ एक छोटा प्रीव्यू देखें
     - और 600 DPI में हाई-क्वालिटी PNG डाउनलोड करें
 
     **Expected Format (Tab-separated):**  
     `Supernode` → `Subjects ($$)` → `Subtopics (@@)` → `Sub-subtopics (^^)`
     """)
 
-# Input CSV Row
-csv_input = st.text_area("📋 Paste your CSV row here:", value="Education\tSubject1 $$ Subject2\tTopic1 @@ Topic2 $$ Topic1 @@ Topic2\tSub1 ^^ Sub2 @@ Sub1 ^^ Sub2 $$ Sub1 ^^ Sub2 @@ Sub1 ^^ Sub2")
+csv_input = st.text_area(
+    "📋 Paste your CSV row here:",
+    value="Education\tSubject1 $$ Subject2\t @@ Topic2 $$ Topic1 @@ Topic2\t @@ Sub1 ^^ Sub2 $$ Sub1 ^^ Sub2 @@ Sub1 ^^ Sub2"
+)
 
 if csv_input:
     try:
-        # Parse CSV Line
         parts = csv_input.strip().split("\t")
         super_node = parts[0].strip()
-        level1_nodes = [s.strip() for s in parts[1].split("$$")]
 
-        # Level-2
+        # Level‑1
+        level1 = [s.strip() for s in parts[1].split("$$")]
+
+        # Level‑2
         level2_map = {}
-        level2_groups = [grp.strip() for grp in parts[2].split("$$")]
-        for i, group in enumerate(level2_groups):
-            topics = [t.strip() for t in group.split("@@")]
-            level2_map[level1_nodes[i]] = topics
+        for i, grp in enumerate(parts[2].split("$$")):
+            subj = level1[i] if i < len(level1) else None
+            if subj:
+                level2_map[subj] = [t.strip() for t in grp.split("@@")]
 
-        # Level-3
+        # Level‑3
         level3_map = {}
-        level3_groups = [grp.strip() for grp in parts[3].split("$$")]
-        for i, group in enumerate(level3_groups):
-            subsub_map = {}
-            topics = level2_map.get(level1_nodes[i], [])
-            topic_groups = [tg.strip() for tg in group.split("@@")]
-            for j, topic in enumerate(topics):
-                subs = topic_groups[j].split("^^") if j < len(topic_groups) else []
-                subsub_map[topic] = [s.strip() for s in subs]
-            level3_map[level1_nodes[i]] = subsub_map
+        for i, grp in enumerate(parts[3].split("$$")):
+            subj = level1[i] if i < len(level1) else None
+            if subj:
+                topics = level2_map.get(subj, [])
+                topic_groups = grp.split("@@")
+                submap = {}
+                for j, topic in enumerate(topics):
+                    subs = []
+                    if j < len(topic_groups):
+                        subs = [s.strip() for s in topic_groups[j].split("^^")]
+                    submap[topic] = subs
+                level3_map[subj] = submap
 
-        # Build Graph
-        def generate_graph(super_node, level1_nodes, level2_map, level3_map):
-            dot = Digraph(comment="Flowchart", format='png')
-            dot.attr(dpi='600', rankdir='LR', size='10')
-            dot.node(super_node, super_node, shape='box', style='filled', fillcolor='lightblue')
+        def generate_graph(super_node, level1, level2, level3):
+            dot = Digraph(format="png")
+            dot.attr(dpi="600", rankdir="LR", size="10")
+            dot.node(super_node, super_node, shape="box", style="filled", fillcolor="lightblue")
 
-            for subject in level1_nodes:
-                dot.node(subject, subject, shape='ellipse', style='filled', fillcolor='lightgreen')
-                dot.edge(super_node, subject)
+            for subj in level1:
+                if not subj:
+                    continue
+                dot.node(subj, subj, shape="ellipse", style="filled", fillcolor="lightgreen")
+                dot.edge(super_node, subj)
 
-                for topic in level2_map.get(subject, []):
-                    topic_id = f"{subject}_{topic}".replace(" ", "_")
-                    dot.node(topic_id, topic, shape='note', style='filled', fillcolor='lightyellow')
-                    dot.edge(subject, topic_id)
+                for topic in level2.get(subj, []):
+                    if not topic:
+                        # break here: no node, no downstream
+                        continue
+                    tid = f"{subj}_{topic}".replace(" ", "_")
+                    dot.node(tid, topic, shape="note", style="filled", fillcolor="lightyellow")
+                    dot.edge(subj, tid)
 
-                    for sub in level3_map.get(subject, {}).get(topic, []):
-                        sub_id = f"{topic_id}_{sub}".replace(" ", "_")
-                        dot.node(sub_id, sub, shape='component', style='filled', fillcolor='mistyrose')
-                        dot.edge(topic_id, sub_id)
+                    for sub in level3.get(subj, {}).get(topic, []):
+                        if not sub:
+                            continue
+                        sid = f"{tid}_{sub}".replace(" ", "_")
+                        dot.node(sid, sub, shape="component", style="filled", fillcolor="mistyrose")
+                        dot.edge(tid, sid)
+
             return dot
 
-        dot = generate_graph(super_node, level1_nodes, level2_map, level3_map)
+        dot = generate_graph(super_node, level1, level2_map, level3_map)
 
-        # Export HD PNG and show small preview
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            path = Path(tmpdirname) / "flowchart"
-            dot.render(str(path), format="png", cleanup=True)
+        # Render & Preview
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "flowchart"
+            dot.render(str(p), cleanup=True)
 
-            # Show small preview
-            st.subheader("🖼️ Preview (Small Thumbnail)")
-            img = Image.open(f"{path}.png")
-            st.image(img, width=300)  # Smaller display size
+            st.subheader("🖼️ Preview (Thumbnail)")
+            img = Image.open(f"{p}.png")
+            st.image(img, width=300)
 
-            # Download button
-            st.subheader("⬇️ Download High-Quality Diagram (600 DPI)")
-            with open(f"{path}.png", "rb") as f:
-                st.download_button(
-                    label="📥 Download HD Flowchart PNG",
-                    data=f,
-                    file_name="flowchart_hd.png",
-                    mime="image/png"
-                )
+            st.subheader("⬇️ Download HD PNG (600 DPI)")
+            with open(f"{p}.png", "rb") as f:
+                st.download_button("📥 Download", f, "flowchart_hd.png", "image/png")
 
     except Exception as e:
-        st.error(f"❌ Error parsing input: {e}")
+        st.error(f"❌ Parsing error: {e}")
