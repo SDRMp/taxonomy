@@ -370,22 +370,37 @@
         // Get all subjects (direct children of root)
         const subjects = hierarchy.nodes[root]?.children || [];
         
-        // Get all topics (children of subjects)
-        const topicsBySubject = subjects.map(subject => 
-          hierarchy.nodes[subject]?.children || []
-        );
+        // Get all topics (children of subjects) with parent info
+        const topicsWithParents = [];
+        subjects.forEach(subject => {
+          const topics = hierarchy.nodes[subject]?.children || [];
+          topics.forEach(topic => {
+            topicsWithParents.push({
+              name: topic,
+              parent: subject
+            });
+          });
+        });
         
-        // Get all subtopics (children of topics)
-        const subtopicsByTopic = topicsBySubject.flatMap(topics => 
-          topics.flatMap(topic => hierarchy.nodes[topic]?.children || [])
-        );
+        // Get all subtopics (children of topics) with parent info
+        const subtopicsWithParents = [];
+        topicsWithParents.forEach(topicObj => {
+          const subtopics = hierarchy.nodes[topicObj.name]?.children || [];
+          subtopics.forEach(subtopic => {
+            subtopicsWithParents.push({
+              name: subtopic,
+              parent: topicObj.name,
+              grandparent: topicObj.parent
+            });
+          });
+        });
 
         // Build the row with the correct format
         const row = [
           root,
           subjects.join(" $$ ") || "null",
-          topicsBySubject.map(topics => topics.join(" @@ ") || "null").join(" $$ "),
-          subtopicsByTopic.join(" ^^ ") || "null"
+          topicsWithParents.map(t => t.name + "@@" + t.parent).join(" $$ ") || "null",
+          subtopicsWithParents.map(st => st.name + "^^" + st.parent + "@@" + st.grandparent).join(" $$ ") || "null"
         ];
 
         rows.push(row.join("\t"));
