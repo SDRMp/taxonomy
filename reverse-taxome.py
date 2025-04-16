@@ -11,7 +11,9 @@ input_csv = st.text_area("📋 Paste your CSV row here:", height=150,
 
 dpi = st.slider("🖨️ Export DPI (higher = better quality)", min_value=100, max_value=600, value=300, step=50)
 
-if st.button("📊 Generate Flowchart"):
+show_preview = st.checkbox("📊 Flowchart Preview", value=True)
+
+if st.button("📈 Generate Flowchart"):
     try:
         # Parse the CSV line
         parts = input_csv.strip().split("\t")
@@ -64,7 +66,9 @@ if st.button("📊 Generate Flowchart"):
                 return dot
 
             flowchart = generate_graph(super_node, level1_nodes, level2_map, level3_map)
-            st.graphviz_chart(flowchart.source)
+
+            if show_preview:
+                st.graphviz_chart(flowchart.source)
 
             # Save to file
             output_path = "/tmp/flowchart_hd"
