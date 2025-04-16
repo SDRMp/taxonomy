@@ -302,6 +302,72 @@
       }
     }
 
+    
+  function convertHierarchyToCSV(hierarchy) {
+    const rows = [];
+  
+    hierarchy.roots.forEach(root => {
+      // Get all subjects (direct children of root)
+      const subjects = hierarchy.nodes[root]?.children || [];
+      
+      // Build subjects string (Level 1)
+      const subjectsStr = subjects.length > 0 ? subjects.join(" $$ ") : "null";
+      
+      // Process topics for each subject
+      const topicGroups = [];
+      const subtopicGroups = [];
+      
+      // Ensure we have at least one subject group (even if empty)
+      const effectiveSubjects = subjects.length > 0 ? subjects : [null];
+      
+      effectiveSubjects.forEach(subject => {
+        // Get topics for this subject (or null if no subject)
+        const topics = subject ? hierarchy.nodes[subject]?.children || [] : [];
+        topicGroups.push(topics.length > 0 ? topics : ["null"]);
+        
+        // Process subtopics for each topic
+        const subjectSubtopicGroup = [];
+        
+        // Ensure we have at least one topic group (even if empty)
+        const effectiveTopics = topics.length > 0 ? topics : [null];
+        
+        effectiveTopics.forEach(topic => {
+          // Get subtopics for this topic (or null if no topic)
+          const subtopics = topic ? hierarchy.nodes[topic]?.children || [] : [];
+          subjectSubtopicGroup.push(subtopics.length > 0 ? subtopics : ["null"]);
+        });
+        
+        subtopicGroups.push(subjectSubtopicGroup);
+      });
+      
+      // Build topics string (Level 2)
+      const topicsStr = topicGroups.map(topics => 
+        topics.join(" @@ ")
+      ).join(" $$ ");
+      
+      // Build subtopics string (Level 3)
+      const subtopicsStr = subtopicGroups.map((subjectSubtopics, subjIndex) => {
+        // Get the topics for this subject to know how many @@ separators we need
+        const topicsForSubject = topicGroups[subjIndex];
+        const subtopicParts = [];
+        
+        // For each topic in this subject, add its subtopics
+        topicsForSubject.forEach((topic, topicIndex) => {
+          subtopicParts.push(subjectSubtopics[topicIndex].join(" ^^ "));
+        });
+        
+        return subtopicParts.join(" @@ ");
+      }).join(" $$ ");
+      
+      // Build the row
+      const row = [root, subjectsStr, topicsStr, subtopicsStr];
+      rows.push(row.join("\t"));
+    });
+  
+    return rows.join("\n");
+  }
+    
+
     function exportCSV() {
       const data = editor.export();
       const nodes = data.drawflow.Home.data;
@@ -364,65 +430,7 @@
     }
 
   
-    function convertHierarchyToCSV(hierarchy) {
-      const rows = [];
-
-      hierarchy.roots.forEach(root => {
-        // Get all subjects (direct children of root)
-        const subjects = hierarchy.nodes[root]?.children || [];
-        
-        // Build subjects string (Level 1)
-        const subjectsStr = subjects.length > 0 ? subjects.join(" $$ ") : "null";
-        
-        // Process each subject to get its topics
-        const topicGroups = [];
-        const subtopicGroups = [];
-        
-        subjects.forEach(subject => {
-          // Get topics for this subject
-          const topics = hierarchy.nodes[subject]?.children || [];
-          topicGroups.push(topics.length > 0 ? topics : ["null"]);
-          
-          // Get subtopics for each topic in this subject
-          const subjectSubtopicGroup = [];
-          topics.forEach(topic => {
-            const subtopics = hierarchy.nodes[topic]?.children || [];
-            subjectSubtopicGroup.push(subtopics.length > 0 ? subtopics : ["null"]);
-          });
-          
-          // If no topics, we still need one "null" subtopic group for the subject
-          if (topics.length === 0) {
-            subjectSubtopicGroup.push(["null"]);
-          }
-          
-          subtopicGroups.push(subjectSubtopicGroup);
-        });
-        
-        // If no subjects, we need one "null" topic group and one "null" subtopic group
-        if (subjects.length === 0) {
-          topicGroups.push(["null"]);
-          subtopicGroups.push([["null"]]);
-        }
-        
-        // Build topics string (Level 2)
-        const topicsStr = topicGroups.map(topics => 
-          topics.join(" @@ ")
-        ).join(" $$ ");
-        
-        // Build subtopics string (Level 3)
-        const subtopicsStr = subtopicGroups.map(subjectSubtopics => 
-          subjectSubtopics.map(topicSubtopics => 
-            topicSubtopics.join(" ^^ ")
-          ).join(" @@ ")
-        ).join(" $$ ");
-        
-        // Build the row
-        const row = [root, subjectsStr, topicsStr, subtopicsStr];
-        rows.push(row.join("\t"));
-      });
-
-      return rows.join("\n");
-    }
+   
     function downloadCSV() {
       const csv = exportCSV();
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
