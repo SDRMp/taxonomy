@@ -415,41 +415,35 @@
     }
 
     function convertHierarchyToCSV(hierarchy) {
-      const rows = [];
-
-      // Process each root branch
-      hierarchy.roots.forEach(root => {
-        const row = [];
-        let currentNodes = [root];
-        let level = 0;
-        
-        while (currentNodes.length > 0) {
-          const segment = [];
-          const nextNodes = [];
-          
-          currentNodes.forEach(node => {
-            segment.push(node);
-            if (hierarchy.nodes[node] && hierarchy.nodes[node].children) {
-              nextNodes.push(...hierarchy.nodes[node].children);
-            }
-          });
-          
-          // Add the appropriate separator based on level
-          let separator;
-          if (level === 0) separator = " $$ ";
-          else if (level === 1) separator = " @@ ";
-          else separator = " ^^ ";
-          
-          row.push(segment.join(separator));
-          currentNodes = nextNodes;
-          level++;
-        }
-        
-        rows.push(row.join("\t"));
-      });
+        const rows = [];
       
-      return rows.join("\n");
-    }
+        hierarchy.roots.forEach(root => {
+          // Get all subjects (direct children of root)
+          const subjects = hierarchy.nodes[root]?.children || [];
+          
+          // Get all topics (children of subjects)
+          const topicsBySubject = subjects.map(subject => 
+            hierarchy.nodes[subject]?.children || []
+          );
+          
+          // Get all subtopics (children of topics)
+          const subtopicsByTopic = topicsBySubject.flatMap(topics => 
+            topics.flatMap(topic => hierarchy.nodes[topic]?.children || [])
+          );
+      
+          // Build the row with the correct format
+          const row = [
+            root,
+            subjects.join(" $$ ") || "null",
+            topicsBySubject.map(topics => topics.join(" @@ ") || "null").join(" $$ "),
+            subtopicsByTopic.join(" ^^ ") || "null"
+          ];
+      
+          rows.push(row.join("\t"));
+        });
+      
+        return rows.join("\n");
+      }
 
     function convertHierarchyToJSON(hierarchy) {
       const result = {};
