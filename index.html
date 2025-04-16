@@ -62,7 +62,7 @@
       resize: vertical;
     }
     .sidebar {
-      width: 300px;
+      width: 250px;
       background: #f9f9f9;
       border-left: 1px solid #ddd;
       overflow-y: auto;
@@ -71,80 +71,51 @@
       flex-direction: column;
     }
     .word-category {
-      margin-bottom: 20px;
-      padding: 10px;
-      background: white;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 15px;
     }
     .word-category h3 {
-      margin: 0 0 12px 0;
-      padding-bottom: 8px;
-      border-bottom: 2px solid #eee;
-      font-size: 16px;
-      color: #333;
+      margin: 0 0 8px 0;
+      padding-bottom: 5px;
+      border-bottom: 1px solid #ddd;
+      font-size: 14px;
+      color: #555;
     }
     .word-item {
       background: #e0e0e0;
-      padding: 8px 12px;
+      padding: 5px 10px;
       border-radius: 15px;
-      margin: 5px 0;
+      margin: 3px 0;
       cursor: grab;
       user-select: none;
-      font-size: 14px;
-      transition: all 0.2s;
+      font-size: 13px;
     }
     .word-item:hover {
       background: #d0d0d0;
-      transform: translateX(3px);
     }
     .add-word {
       display: flex;
-      gap: 8px;
-      padding: 12px;
+      gap: 5px;
+      padding: 10px;
       background: #f0f0f0;
       border-top: 1px solid #ddd;
       margin-top: auto;
     }
     #newWord {
       flex: 1;
-      padding: 8px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
+      padding: 5px;
     }
     #categorySelect {
-      padding: 8px;
-      margin-bottom: 15px;
+      padding: 5px;
+      margin-bottom: 5px;
       width: 100%;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      font-size: 14px;
     }
     .separator-info {
-      font-size: 13px;
+      font-size: 12px;
       color: #666;
-      margin-top: 15px;
-      padding: 10px;
+      margin-top: 10px;
+      padding: 5px;
       background: #f0f0f0;
       border-radius: 5px;
-      line-height: 1.5;
-    }
-    .tab {
-      padding: 8px 15px;
-      margin-right: 5px;
-      background: #e0e0e0;
-      border-radius: 5px 5px 0 0;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    .tab.active {
-      background: white;
-      border-bottom: 2px solid #4CAF50;
-    }
-    .tabs-container {
-      display: flex;
-      margin-bottom: 15px;
-      border-bottom: 1px solid #ddd;
     }
   </style>
 </head>
@@ -160,9 +131,9 @@
     <div id="drawflow"></div>
     
     <div class="sidebar" id="sidebar">
-      <div class="tabs-container" id="categoryTabs">
-        <!-- Tabs will be added here dynamically -->
-      </div>
+      <select id="categorySelect" onchange="filterCategory()">
+        <option value="all">All Categories</option>
+      </select>
       
       <div id="wordCategories"></div>
       
@@ -170,7 +141,9 @@
         <strong>Hierarchy Separators:</strong><br>
         <span style="color: #d32f2f;">$$</span> → Between Subjects (Level-1)<br>
         <span style="color: #1976d2;">@@</span> → Between Topics (Level-2)<br>
-        <span style="color: #388e3c;">^^</span> → Between Subtopics (Level-3)
+        <span style="color: #388e3c;">^^</span> → Between Subtopics (Level-3)<br>
+        <span style="color: #7b1fa2;">&&</span> → Level-4<br>
+        <span style="color: #ff8f00;">%%</span> → Level-5
       </div>
       
       <div class="add-word">
@@ -195,7 +168,7 @@
     let nodeId = 1;
     let wordCategories = {};
     let allWords = [];
-    let currentCategory = "all";
+    let currentDragItem = null;
 
     // Initialize drag and drop
     function setupDragAndDrop() {
@@ -204,8 +177,13 @@
         item.draggable = true;
         
         item.addEventListener('dragstart', (e) => {
+          currentDragItem = item;
           e.dataTransfer.setData('text/plain', item.textContent);
           e.dataTransfer.effectAllowed = 'copy';
+        });
+
+        item.addEventListener('dragend', () => {
+          currentDragItem = null;
         });
       });
 
@@ -218,7 +196,9 @@
 
       drawflowEl.addEventListener('drop', (e) => {
         e.preventDefault();
-        const word = e.dataTransfer.getData('text/plain');
+        if (!currentDragItem) return;
+        
+        const word = currentDragItem.textContent;
         if (word) {
           const rect = drawflowEl.getBoundingClientRect();
           const x = e.clientX - rect.left;
@@ -229,6 +209,15 @@
     }
 
     function addNodeAtPosition(label, x, y) {
+      // Check if node already exists at this position (prevent duplicates)
+      const nodes = editor.drawflow.drawflow.Home.data;
+      for (const nodeId in nodes) {
+        const node = nodes[nodeId];
+        if (Math.abs(node.pos_x - x) < 30 && Math.abs(node.pos_y - y) < 30) {
+          return; // Skip if node already exists nearby
+        }
+      }
+      
       const htmlNode = createNodeElement(label, nodeId);
       editor.addNode(
         "node", 1, 1,
@@ -243,66 +232,28 @@
       const container = document.getElementById('wordCategories');
       container.innerHTML = '';
       
-      const tabsContainer = document.getElementById('categoryTabs');
-      tabsContainer.innerHTML = '';
-      
-      // Add "All" tab
-      const allTab = document.createElement('div');
-      allTab.className = `tab ${currentCategory === 'all' ? 'active' : ''}`;
-      allTab.textContent = 'All';
-      allTab.onclick = () => {
-        currentCategory = 'all';
-        filterCategory();
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        allTab.classList.add('active');
-      };
-      tabsContainer.appendChild(allTab);
-      
-      // Add category tabs
-      for (const category of Object.keys(wordCategories)) {
-        const tab = document.createElement('div');
-        tab.className = `tab ${currentCategory === category ? 'active' : ''}`;
-        tab.textContent = category;
-        tab.onclick = () => {
-          currentCategory = category;
-          filterCategory();
-          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-          tab.classList.add('active');
-        };
-        tabsContainer.appendChild(tab);
+      const categorySelect = document.getElementById('categorySelect');
+      // Keep "All Categories" option
+      while (categorySelect.options.length > 1) {
+        categorySelect.remove(1);
       }
       
-      // Show all words if "All" is selected, otherwise filter
-      if (currentCategory === 'all') {
-        for (const [category, words] of Object.entries(wordCategories)) {
-          const categoryDiv = document.createElement('div');
-          categoryDiv.className = 'word-category';
-          categoryDiv.dataset.category = category;
-          
-          const header = document.createElement('h3');
-          header.textContent = category;
-          categoryDiv.appendChild(header);
-          
-          words.forEach(word => {
-            const wordDiv = document.createElement('div');
-            wordDiv.className = 'word-item';
-            wordDiv.textContent = word;
-            wordDiv.draggable = true;
-            categoryDiv.appendChild(wordDiv);
-          });
-          
-          container.appendChild(categoryDiv);
-        }
-      } else {
+      for (const [category, words] of Object.entries(wordCategories)) {
+        // Add to category dropdown
+        const option = document.createElement('option');
+        option.value = category;
+        option.textContent = category;
+        categorySelect.appendChild(option);
+        
         const categoryDiv = document.createElement('div');
         categoryDiv.className = 'word-category';
-        categoryDiv.dataset.category = currentCategory;
+        categoryDiv.dataset.category = category;
         
         const header = document.createElement('h3');
-        header.textContent = currentCategory;
+        header.textContent = category;
         categoryDiv.appendChild(header);
         
-        wordCategories[currentCategory].forEach(word => {
+        words.forEach(word => {
           const wordDiv = document.createElement('div');
           wordDiv.className = 'word-item';
           wordDiv.textContent = word;
@@ -317,7 +268,16 @@
     }
 
     function filterCategory() {
-      updateWordCategories();
+      const selectedCategory = document.getElementById('categorySelect').value;
+      const categories = document.querySelectorAll('.word-category');
+      
+      categories.forEach(cat => {
+        if (selectedCategory === 'all' || cat.dataset.category === selectedCategory) {
+          cat.style.display = 'block';
+        } else {
+          cat.style.display = 'none';
+        }
+      });
     }
 
     function addNewWord() {
@@ -331,13 +291,7 @@
         if (!wordCategories['Custom'].includes(newWord)) {
           wordCategories['Custom'].push(newWord);
           allWords.push(newWord);
-          currentCategory = 'Custom'; // Switch to Custom tab
           updateWordCategories();
-          
-          // Add directly to workspace at a reasonable position
-          const x = 100 + (nodeId % 10) * 100;
-          const y = 100 + Math.floor(nodeId / 10) * 80;
-          addNodeAtPosition(newWord, x, y);
         }
         
         document.getElementById('newWord').value = '';
@@ -441,7 +395,9 @@
           let separator;
           if (level === 0) separator = " $$ ";
           else if (level === 1) separator = " @@ ";
-          else separator = " ^^ ";
+          else if (level === 2) separator = " ^^ ";
+          else if (level === 3) separator = " && ";
+          else separator = " %% ";
           
           row.push(segment.join(separator));
           currentNodes = nextNodes;
@@ -498,7 +454,9 @@
                 // Split hierarchical values
                 const separator = colIndex === 0 ? '' : 
                                  colIndex === 1 ? ' $$ ' :
-                                 colIndex === 2 ? ' @@ ' : ' ^^ ';
+                                 colIndex === 2 ? ' @@ ' :
+                                 colIndex === 3 ? ' ^^ ' :
+                                 colIndex === 4 ? ' && ' : ' %% ';
                 const items = value.split(separator).filter(Boolean);
                 items.forEach(item => {
                   if (!wordCategories[headers[colIndex]].includes(item)) {
@@ -511,7 +469,7 @@
           }
         }
         
-        currentCategory = 'all';
+        document.getElementById('categorySelect').value = 'all';
         updateWordCategories();
       };
       reader.readAsText(file);
