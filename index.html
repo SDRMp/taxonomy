@@ -62,7 +62,7 @@
       resize: vertical;
     }
     .sidebar {
-      width: 250px;
+      width: 300px;
       background: #f9f9f9;
       border-left: 1px solid #ddd;
       overflow-y: auto;
@@ -71,58 +71,86 @@
       flex-direction: column;
     }
     .word-category {
-      margin-bottom: 15px;
+      margin-bottom: 20px;
+      padding: 10px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     .word-category h3 {
-      margin: 0 0 8px 0;
-      padding-bottom: 5px;
-      border-bottom: 1px solid #ddd;
-      font-size: 14px;
-      color: #555;
+      margin: 0 0 12px 0;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #eee;
+      font-size: 16px;
+      color: #333;
     }
     .word-item {
       background: #e0e0e0;
-      padding: 5px 10px;
+      padding: 8px 12px;
       border-radius: 15px;
-      margin: 3px 0;
+      margin: 5px 0;
       cursor: grab;
       user-select: none;
-      font-size: 13px;
+      font-size: 14px;
+      transition: all 0.2s;
     }
     .word-item:hover {
       background: #d0d0d0;
+      transform: translateX(3px);
     }
     .add-word {
       display: flex;
-      gap: 5px;
-      padding: 10px;
+      gap: 8px;
+      padding: 12px;
       background: #f0f0f0;
       border-top: 1px solid #ddd;
       margin-top: auto;
     }
     #newWord {
       flex: 1;
-      padding: 5px;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
     }
     #categorySelect {
-      padding: 5px;
-      margin-bottom: 5px;
+      padding: 8px;
+      margin-bottom: 15px;
       width: 100%;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
     }
     .separator-info {
-      font-size: 12px;
+      font-size: 13px;
       color: #666;
-      margin-top: 10px;
-      padding: 5px;
+      margin-top: 15px;
+      padding: 10px;
       background: #f0f0f0;
       border-radius: 5px;
+      line-height: 1.5;
+    }
+    .tab {
+      padding: 8px 15px;
+      margin-right: 5px;
+      background: #e0e0e0;
+      border-radius: 5px 5px 0 0;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .tab.active {
+      background: white;
+      border-bottom: 2px solid #4CAF50;
+    }
+    .tabs-container {
+      display: flex;
+      margin-bottom: 15px;
+      border-bottom: 1px solid #ddd;
     }
   </style>
 </head>
 <body>
 
   <div class="controls">
-    <button onclick="deleteSelectedNode()">❌ Delete Selected</button>
     <button onclick="exportCSV()">📄 Export CSV</button>
     <button onclick="document.getElementById('csvFile').click()">📁 Import CSV</button>
     <input type="file" id="csvFile" accept=".csv" style="display:none" onchange="importCSV(event)">
@@ -132,17 +160,17 @@
     <div id="drawflow"></div>
     
     <div class="sidebar" id="sidebar">
-      <select id="categorySelect" onchange="filterCategory()">
-        <option value="all">All Categories</option>
-      </select>
+      <div class="tabs-container" id="categoryTabs">
+        <!-- Tabs will be added here dynamically -->
+      </div>
       
       <div id="wordCategories"></div>
       
       <div class="separator-info">
         <strong>Hierarchy Separators:</strong><br>
-        $$ → Between Subjects (Level-1)<br>
-        @@ → Between Topics (Level-2)<br>
-        ^^ → Between Subtopics (Level-3)
+        <span style="color: #d32f2f;">$$</span> → Between Subjects (Level-1)<br>
+        <span style="color: #1976d2;">@@</span> → Between Topics (Level-2)<br>
+        <span style="color: #388e3c;">^^</span> → Between Subtopics (Level-3)
       </div>
       
       <div class="add-word">
@@ -167,6 +195,7 @@
     let nodeId = 1;
     let wordCategories = {};
     let allWords = [];
+    let currentCategory = "all";
 
     // Initialize drag and drop
     function setupDragAndDrop() {
@@ -214,28 +243,66 @@
       const container = document.getElementById('wordCategories');
       container.innerHTML = '';
       
-      const categorySelect = document.getElementById('categorySelect');
-      // Keep "All Categories" option
-      while (categorySelect.options.length > 1) {
-        categorySelect.remove(1);
+      const tabsContainer = document.getElementById('categoryTabs');
+      tabsContainer.innerHTML = '';
+      
+      // Add "All" tab
+      const allTab = document.createElement('div');
+      allTab.className = `tab ${currentCategory === 'all' ? 'active' : ''}`;
+      allTab.textContent = 'All';
+      allTab.onclick = () => {
+        currentCategory = 'all';
+        filterCategory();
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        allTab.classList.add('active');
+      };
+      tabsContainer.appendChild(allTab);
+      
+      // Add category tabs
+      for (const category of Object.keys(wordCategories)) {
+        const tab = document.createElement('div');
+        tab.className = `tab ${currentCategory === category ? 'active' : ''}`;
+        tab.textContent = category;
+        tab.onclick = () => {
+          currentCategory = category;
+          filterCategory();
+          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+        };
+        tabsContainer.appendChild(tab);
       }
       
-      for (const [category, words] of Object.entries(wordCategories)) {
-        // Add to category dropdown
-        const option = document.createElement('option');
-        option.value = category;
-        option.textContent = category;
-        categorySelect.appendChild(option);
-        
+      // Show all words if "All" is selected, otherwise filter
+      if (currentCategory === 'all') {
+        for (const [category, words] of Object.entries(wordCategories)) {
+          const categoryDiv = document.createElement('div');
+          categoryDiv.className = 'word-category';
+          categoryDiv.dataset.category = category;
+          
+          const header = document.createElement('h3');
+          header.textContent = category;
+          categoryDiv.appendChild(header);
+          
+          words.forEach(word => {
+            const wordDiv = document.createElement('div');
+            wordDiv.className = 'word-item';
+            wordDiv.textContent = word;
+            wordDiv.draggable = true;
+            categoryDiv.appendChild(wordDiv);
+          });
+          
+          container.appendChild(categoryDiv);
+        }
+      } else {
         const categoryDiv = document.createElement('div');
         categoryDiv.className = 'word-category';
-        categoryDiv.dataset.category = category;
+        categoryDiv.dataset.category = currentCategory;
         
         const header = document.createElement('h3');
-        header.textContent = category;
+        header.textContent = currentCategory;
         categoryDiv.appendChild(header);
         
-        words.forEach(word => {
+        wordCategories[currentCategory].forEach(word => {
           const wordDiv = document.createElement('div');
           wordDiv.className = 'word-item';
           wordDiv.textContent = word;
@@ -250,16 +317,7 @@
     }
 
     function filterCategory() {
-      const selectedCategory = document.getElementById('categorySelect').value;
-      const categories = document.querySelectorAll('.word-category');
-      
-      categories.forEach(cat => {
-        if (selectedCategory === 'all' || cat.dataset.category === selectedCategory) {
-          cat.style.display = 'block';
-        } else {
-          cat.style.display = 'none';
-        }
-      });
+      updateWordCategories();
     }
 
     function addNewWord() {
@@ -273,7 +331,13 @@
         if (!wordCategories['Custom'].includes(newWord)) {
           wordCategories['Custom'].push(newWord);
           allWords.push(newWord);
+          currentCategory = 'Custom'; // Switch to Custom tab
           updateWordCategories();
+          
+          // Add directly to workspace at a reasonable position
+          const x = 100 + (nodeId % 10) * 100;
+          const y = 100 + Math.floor(nodeId / 10) * 80;
+          addNodeAtPosition(newWord, x, y);
         }
         
         document.getElementById('newWord').value = '';
@@ -290,15 +354,6 @@
         data.data.label = div.innerText;
       };
       return div;
-    }
-
-    function deleteSelectedNode() {
-      const selected = editor.selected_node;
-      if (selected) {
-        editor.removeNodeId(selected);
-      } else {
-        alert("Select a node to delete.");
-      }
     }
 
     function exportCSV() {
@@ -399,18 +454,6 @@
       return rows.join("\n");
     }
 
-    function downloadCSV() {
-      const csv = exportCSV();
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "hierarchy.csv";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }
-
     function copyCSV() {
       exportCSV();
       const csvOutput = document.getElementById("csvOutput");
@@ -436,36 +479,39 @@
         const lines = content.split('\n');
         
         // First line is headers
-        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        const headers = lines[0].split('\t').map(h => h.trim().replace(/"/g, ''));
         
         // Create categories from column headers
         headers.forEach(header => {
           wordCategories[header] = [];
         });
         
-        // Process data rows
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-          
-          // Simple CSV parsing (handles quoted values)
-          const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
-                            .map(v => v.trim().replace(/^"|"$/g, ''));
-          
-          values.forEach((value, colIndex) => {
-            if (value && headers[colIndex]) {
-              // Split hierarchical values
-              const items = value.split(/\s*\$\$\s*|\s*@@\s*|\s*\^\^\s*/).filter(Boolean);
-              items.forEach(item => {
-                if (!wordCategories[headers[colIndex]].includes(item)) {
-                  wordCategories[headers[colIndex]].push(item);
-                  allWords.push(item);
-                }
-              });
-            }
-          });
+        // Process data rows (we'll just use first row for now)
+        if (lines.length > 1) {
+          const line = lines[1].trim();
+          if (line) {
+            // Split by tabs for columns
+            const values = line.split('\t').map(v => v.trim().replace(/"/g, ''));
+            
+            values.forEach((value, colIndex) => {
+              if (value && headers[colIndex]) {
+                // Split hierarchical values
+                const separator = colIndex === 0 ? '' : 
+                                 colIndex === 1 ? ' $$ ' :
+                                 colIndex === 2 ? ' @@ ' : ' ^^ ';
+                const items = value.split(separator).filter(Boolean);
+                items.forEach(item => {
+                  if (!wordCategories[headers[colIndex]].includes(item)) {
+                    wordCategories[headers[colIndex]].push(item);
+                    allWords.push(item);
+                  }
+                });
+              }
+            });
+          }
         }
         
+        currentCategory = 'all';
         updateWordCategories();
       };
       reader.readAsText(file);
