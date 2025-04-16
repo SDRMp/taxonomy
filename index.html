@@ -1,554 +1,75 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>🧱 Hierarchical Flowchart Builder</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/drawflow/dist/drawflow.min.css">
-  <style>
-    body { 
-      font-family: sans-serif; 
-      margin: 0; 
-      padding: 0; 
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-    }
-    .main-container {
-      display: flex;
-      flex: 1;
-      overflow: hidden;
-    }
-    #drawflow {
-      height: 100%;
-      flex: 1;
-      border: 2px solid #ccc;
-      background: #f5f5f5;
-    }
-    .node {
-      padding: 10px;
-      border-radius: 10px;
-      background-color: white;
-      border: 1px solid #999;
-      text-align: center;
-      cursor: pointer;
-      min-width: 80px;
-    }
-    .controls {
-      padding: 10px;
-      background: #f0f0f0;
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    button {
-      padding: 6px 10px;
-      cursor: pointer;
-    }
-    .output-container {
-      padding: 10px;
-      background: #f9f9f9;
-      border-top: 1px solid #ddd;
-    }
-    .output-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    textarea {
-      width: 100%;
-      height: 120px;
-      font-family: monospace;
-      margin-top: 10px;
-      resize: vertical;
-    }
-    .sidebar {
-      width: 250px;
-      background: #f9f9f9;
-      border-left: 1px solid #ddd;
-      overflow-y: auto;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-    }
-    .word-category {
-      margin-bottom: 15px;
-    }
-    .word-category h3 {
-      margin: 0 0 8px 0;
-      padding-bottom: 5px;
-      border-bottom: 1px solid #ddd;
-      font-size: 14px;
-      color: #555;
-    }
-    .word-item {
-      background: #e0e0e0;
-      padding: 5px 10px;
-      border-radius: 15px;
-      margin: 3px 0;
-      cursor: grab;
-      user-select: none;
-      font-size: 13px;
-    }
-    .word-item:hover {
-      background: #d0d0d0;
-    }
-    .add-word {
-      display: flex;
-      gap: 5px;
-      padding: 10px;
-      background: #f0f0f0;
-      border-top: 1px solid #ddd;
-      margin-top: auto;
-    }
-    #newWord {
-      flex: 1;
-      padding: 5px;
-    }
-    #categorySelect {
-      padding: 5px;
-      margin-bottom: 5px;
-      width: 100%;
-    }
-    .separator-info {
-      font-size: 12px;
-      color: #666;
-      margin-top: 10px;
-      padding: 5px;
-      background: #f0f0f0;
-      border-radius: 5px;
-    }
-  </style>
-</head>
-<body>
+import streamlit as st
+from graphviz import Digraph
 
-  <div class="controls">
-    <button onclick="exportCSV()">📄 Export CSV</button>
-    <button onclick="document.getElementById('csvFile').click()">📁 Import CSV</button>
-    <input type="file" id="csvFile" accept=".csv" style="display:none" onchange="importCSV(event)">
-  </div>
+st.set_page_config(page_title="CSV to Flowchart", layout="wide")
+st.title("🔁 CSV → Flowchart (with HD export)")
 
-  <div class="main-container">
-    <div id="drawflow"></div>
-    
-    <div class="sidebar" id="sidebar">
-      <select id="categorySelect" onchange="filterCategory()">
-        <option value="all">All Categories</option>
-      </select>
-      
-      <div id="wordCategories"></div>
-      
-      <div class="separator-info">
-        <strong>Hierarchy Separators:</strong><br>
-        $$ → Between Subjects (Level-1)<br>
-        @@ → Between Topics (Level-2)<br>
-        ^^ → Between Subtopics (Level-3)
-      </div>
-      
-      <div class="add-word">
-        <input type="text" id="newWord" placeholder="New word">
-        <button onclick="addNewWord()">Add</button>
-      </div>
-    </div>
-  </div>
+st.markdown("Upload or paste a CSV-style row (single line) below:")
 
-  <div class="output-container">
-    <div class="output-header">
-      <h3>📄 Exported CSV</h3>
-      <button onclick="copyCSV()">⎘ Copy</button>
-    </div>
-    <textarea id="csvOutput" readonly></textarea>
-  </div>
+input_csv = st.text_area("📋 Paste your CSV row here:", height=150,
+                         value="Education\tSubject1 $$ Subject2\tTopic1 @@ Topic2 $$ Topic1 @@ Topic2\tSub1 ^^ Sub2 @@ Sub1 ^^ Sub2 $$ Sub1 ^^ Sub2 @@ Sub1 ^^ Sub2")
 
-  <script src="https://cdn.jsdelivr.net/npm/drawflow"></script>
-  <script>
-    const editor = new Drawflow(document.getElementById("drawflow"));
-    editor.start();
-    let nodeId = 1;
-    let wordCategories = {};
-    let allWords = [];
-    let hierarchyStructure = {};
+dpi = st.slider("🖨️ Export DPI (higher = better quality)", min_value=100, max_value=600, value=300, step=50)
 
-    // Initialize drag and drop
-    function setupDragAndDrop() {
-      const wordItems = document.querySelectorAll('.word-item');
-      wordItems.forEach(item => {
-        item.draggable = true;
-        
-        item.addEventListener('dragstart', (e) => {
-          e.dataTransfer.setData('text/plain', item.textContent);
-          e.dataTransfer.effectAllowed = 'copy';
-        });
-      });
+if st.button("📊 Generate Flowchart"):
+    try:
+        # Parse the CSV line
+        parts = input_csv.strip().split("\t")
+        if len(parts) != 4:
+            st.error("CSV row must have exactly 4 tab-separated fields: Super-node, Level1, Level2, Level3")
+        else:
+            super_node = parts[0]
+            level1_nodes = parts[1].split(" $$ ")
 
-      // Handle drop on the editor
-      const drawflowEl = document.getElementById('drawflow');
-      drawflowEl.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'copy';
-      });
+            level2_raw = parts[2].split(" $$ ")
+            level2_map = {}
+            for idx, subject in enumerate(level1_nodes):
+                subtopics = level2_raw[idx].split(" @@ ") if idx < len(level2_raw) else []
+                level2_map[subject] = subtopics
 
-      drawflowEl.addEventListener('drop', (e) => {
-        e.preventDefault();
-        const word = e.dataTransfer.getData('text/plain');
-        if (word) {
-          const rect = drawflowEl.getBoundingClientRect();
-          const x = e.clientX - rect.left;
-          const y = e.clientY - rect.top;
-          addNodeAtPosition(word, x, y);
-        }
-      });
-    }
+            level3_raw = parts[3].split(" $$ ")
+            level3_map = {}
+            for idx, subject in enumerate(level1_nodes):
+                topic_map = {}
+                if idx < len(level3_raw):
+                    topic_chunks = level3_raw[idx].split(" @@ ")
+                    subtopics = level2_map.get(subject, [])
+                    for j, topic in enumerate(subtopics):
+                        subs = topic_chunks[j].split(" ^^ ") if j < len(topic_chunks) else []
+                        topic_map[topic] = subs
+                level3_map[subject] = topic_map
 
-    function addNodeAtPosition(label, x, y) {
-      const htmlNode = createNodeElement(label, nodeId);
-      editor.addNode(
-        "node", 1, 1,
-        x, y,
-        "node", { label },
-        htmlNode.outerHTML
-      );
-      nodeId++;
-    }
+            # Generate the flowchart
+            def generate_graph(super_node, level1_nodes, level2_map, level3_map):
+                dot = Digraph(comment="Flowchart", format='png')
+                dot.attr(dpi=str(dpi))
+                dot.attr(rankdir='LR', size='10')
+                dot.node(super_node, super_node, shape='box', style='filled', fillcolor='lightblue')
 
-    function updateWordCategories() {
-      const container = document.getElementById('wordCategories');
-      container.innerHTML = '';
-      
-      const categorySelect = document.getElementById('categorySelect');
-      // Keep "All Categories" option
-      while (categorySelect.options.length > 1) {
-        categorySelect.remove(1);
-      }
-      
-      // Create categories for each level
-      const categories = {
-        "Super Node": hierarchyStructure.superNode ? [hierarchyStructure.superNode] : [],
-        "Level 1 (Subjects)": hierarchyStructure.level1 || [],
-        "Level 2 (Topics)": hierarchyStructure.level2 || [],
-        "Level 3 (Subtopics)": hierarchyStructure.level3 || []
-      };
-      
-      for (const [category, words] of Object.entries(categories)) {
-        // Add to category dropdown
-        const option = document.createElement('option');
-        option.value = category;
-        option.textContent = category;
-        categorySelect.appendChild(option);
-        
-        const categoryDiv = document.createElement('div');
-        categoryDiv.className = 'word-category';
-        categoryDiv.dataset.category = category;
-        
-        const header = document.createElement('h3');
-        header.textContent = category;
-        categoryDiv.appendChild(header);
-        
-        words.forEach(word => {
-          if (word && word !== "null") {
-            const wordDiv = document.createElement('div');
-            wordDiv.className = 'word-item';
-            wordDiv.textContent = word;
-            wordDiv.draggable = true;
-            categoryDiv.appendChild(wordDiv);
-          }
-        });
-        
-        container.appendChild(categoryDiv);
-      }
-      
-      setupDragAndDrop();
-    }
+                for subject in level1_nodes:
+                    dot.node(subject, subject, shape='ellipse', style='filled', fillcolor='lightgreen')
+                    dot.edge(super_node, subject)
 
-    function filterCategory() {
-      const selectedCategory = document.getElementById('categorySelect').value;
-      const categories = document.querySelectorAll('.word-category');
-      
-      categories.forEach(cat => {
-        if (selectedCategory === 'all' || cat.dataset.category === selectedCategory) {
-          cat.style.display = 'block';
-        } else {
-          cat.style.display = 'none';
-        }
-      });
-    }
+                    subtopics = level2_map.get(subject, [])
+                    for topic in subtopics:
+                        topic_id = f"{subject}_{topic}".replace(" ", "_")
+                        dot.node(topic_id, topic, shape='note', style='filled', fillcolor='lightyellow')
+                        dot.edge(subject, topic_id)
 
-    function addNewWord() {
-      const newWord = document.getElementById('newWord').value.trim();
-      if (newWord) {
-        // Add to "Custom" category
-        if (!wordCategories['Custom']) {
-          wordCategories['Custom'] = [];
-        }
-        
-        if (!wordCategories['Custom'].includes(newWord)) {
-          wordCategories['Custom'].push(newWord);
-          allWords.push(newWord);
-          updateWordCategories();
-        }
-        
-        document.getElementById('newWord').value = '';
-      }
-    }
+                        sub_subs = level3_map.get(subject, {}).get(topic, [])
+                        for sub in sub_subs:
+                            sub_id = f"{topic_id}_{sub}".replace(" ", "_")
+                            dot.node(sub_id, sub, shape='component', style='filled', fillcolor='mistyrose')
+                            dot.edge(topic_id, sub_id)
+                return dot
 
-    function createNodeElement(label, id) {
-      const div = document.createElement("div");
-      div.className = "node";
-      div.innerText = label;
-      div.contentEditable = true;
-      div.onblur = () => {
-        const data = editor.getNodeFromId(id);
-        data.data.label = div.innerText;
-      };
-      return div;
-    }
+            flowchart = generate_graph(super_node, level1_nodes, level2_map, level3_map)
+            st.graphviz_chart(flowchart.source)
 
-    function exportCSV() {
-      const data = editor.export();
-      const nodes = data.drawflow.Home.data;
-      const connections = [];
+            # Save to file
+            output_path = "/tmp/flowchart_hd"
+            flowchart.render(output_path, cleanup=True)
+            with open(f"{output_path}.png", "rb") as f:
+                st.download_button("⬇️ Download HD Flowchart (PNG)", data=f, file_name="flowchart_hd.png", mime="image/png")
 
-      // Build connection map
-      for (const id in nodes) {
-        const node = nodes[id];
-        const source = node.data.label || "";
-        const outputs = node.outputs || {};
-
-        for (const out in outputs) {
-          outputs[out].connections.forEach(conn => {
-            const targetNode = nodes[conn.node];
-            const target = targetNode?.data?.label || "Unknown";
-            connections.push({source, target});
-          });
-        }
-      }
-
-      // Rebuild the hierarchy from connections
-      const hierarchy = rebuildHierarchyFromConnections(connections);
-      const csv = convertHierarchyToCSV(hierarchy);
-      
-      document.getElementById("csvOutput").value = csv;
-      return csv;
-    }
-
-    function rebuildHierarchyFromConnections(connections) {
-      const hierarchy = {
-        superNode: null,
-        level1: [],
-        level2: [],
-        level3: []
-      };
-
-      // Find root node (super node)
-      const allTargets = new Set(connections.map(c => c.target));
-      const rootNodes = connections.filter(c => !allTargets.has(c.source));
-      if (rootNodes.length > 0) {
-        hierarchy.superNode = rootNodes[0].source;
-      }
-
-      // Build level 1 (subjects)
-      const level1Nodes = connections.filter(c => c.source === hierarchy.superNode);
-      hierarchy.level1 = level1Nodes.map(n => n.target);
-
-      // Build level 2 (topics) and level 3 (subtopics)
-      const level2Map = {};
-      const level3Map = {};
-      
-      level1Nodes.forEach(l1 => {
-        const subject = l1.target;
-        const topics = connections.filter(c => c.source === subject);
-        level2Map[subject] = topics.map(t => t.target);
-        
-        topics.forEach(topic => {
-          const subtopics = connections.filter(c => c.source === topic.target);
-          level3Map[topic.target] = subtopics.map(s => s.target);
-        });
-      });
-
-      // Convert maps to proper hierarchical arrays
-      hierarchy.level2 = [];
-      hierarchy.level3 = [];
-      
-      hierarchy.level1.forEach(subject => {
-        const topics = level2Map[subject] || [];
-        hierarchy.level2.push(...topics);
-        
-        topics.forEach(topic => {
-          const subtopics = level3Map[topic] || [];
-          hierarchy.level3.push(...subtopics);
-        });
-      });
-
-      return hierarchy;
-    }
-
-    function convertHierarchyToCSV(hierarchy) {
-      if (!hierarchy.superNode) return "";
-      
-      // Initialize the CSV row structure
-      const row = [hierarchy.superNode];
-      
-      // Process level 1 (subjects)
-      row.push(hierarchy.level1.join(" $$ "));
-      
-      // Process level 2 (topics) - grouped by subject
-      const level2Groups = {};
-      const connections = editor.export().drawflow.Home.data;
-      
-      hierarchy.level1.forEach(subject => {
-        const subjectNode = Object.values(connections).find(n => n.data.label === subject);
-        if (subjectNode) {
-          const outputConnections = subjectNode.outputs?.output_1?.connections || [];
-          const topics = outputConnections.map(conn => {
-            const targetNode = connections[conn.node];
-            return targetNode?.data?.label || "null";
-          });
-          level2Groups[subject] = topics;
-        } else {
-          level2Groups[subject] = [];
-        }
-      });
-      
-      const level2CSV = hierarchy.level1.map(subject => 
-        (level2Groups[subject] || []).join(" @@ ")
-      ).join(" $$ ");
-      
-      row.push(level2CSV);
-      
-      // Process level 3 (subtopics) - grouped by topic
-      const level3Groups = {};
-      
-      hierarchy.level2.forEach(topic => {
-        const topicNode = Object.values(connections).find(n => n.data.label === topic);
-        if (topicNode) {
-          const outputConnections = topicNode.outputs?.output_1?.connections || [];
-          const subtopics = outputConnections.map(conn => {
-            const targetNode = connections[conn.node];
-            return targetNode?.data?.label || "null";
-          });
-          level3Groups[topic] = subtopics;
-        } else {
-          level3Groups[topic] = [];
-        }
-      });
-      
-      // Group subtopics by their parent subjects
-      const level3CSV = hierarchy.level1.map(subject => {
-        const topics = level2Groups[subject] || [];
-        return topics.map(topic => 
-          (level3Groups[topic] || []).join(" ^^ ")
-        ).join(" @@ ");
-      }).join(" $$ ");
-      
-      row.push(level3CSV);
-      
-      return row.join("\t");
-    }
-
-    function copyCSV() {
-      exportCSV();
-      const csvOutput = document.getElementById("csvOutput");
-      csvOutput.select();
-      document.execCommand("copy");
-      alert("CSV copied to clipboard!");
-    }
-
-    function importCSV(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-      
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const content = e.target.result;
-        // Clear existing data
-        editor.clear();
-        nodeId = 1;
-        wordCategories = {};
-        allWords = [];
-        hierarchyStructure = {};
-        
-        // Process CSV content (single row format)
-        const lines = content.split('\n');
-        if (lines.length === 0) return;
-        
-        const row = lines[0].split('\t');
-        if (row.length < 4) return;
-        
-        // Extract super node
-        hierarchyStructure.superNode = row[0].trim();
-        
-        // Extract level 1 (subjects)
-        hierarchyStructure.level1 = row[1].split(' $$ ').map(s => s.trim()).filter(s => s && s !== "null");
-        
-        // Extract level 2 (topics)
-        const level2Subjects = row[2].split(' $$ ').map(s => s.trim());
-        hierarchyStructure.level2 = [];
-        
-        level2Subjects.forEach((subjectGroup, i) => {
-          const topics = subjectGroup.split(' @@ ').map(t => t.trim()).filter(t => t && t !== "null");
-          hierarchyStructure.level2.push(...topics);
-        });
-        
-        // Extract level 3 (subtopics)
-        const level3Subjects = row[3].split(' $$ ').map(s => s.trim());
-        hierarchyStructure.level3 = [];
-        
-        level3Subjects.forEach((subjectGroup, i) => {
-          const topicGroups = subjectGroup.split(' @@ ').map(t => t.trim());
-          topicGroups.forEach(topicGroup => {
-            const subtopics = topicGroup.split(' ^^ ').map(s => s.trim()).filter(s => s && s !== "null");
-            hierarchyStructure.level3.push(...subtopics);
-          });
-        });
-        
-        // Update word categories
-        updateWordCategories();
-        
-        // Build the flowchart from hierarchy
-        buildFlowchartFromHierarchy(hierarchyStructure);
-      };
-      reader.readAsText(file);
-    }
-
-    function buildFlowchartFromHierarchy(hierarchy) {
-      if (!hierarchy.superNode) return;
-      
-      // Position tracking
-      let x = 100, y = 100;
-      
-      // Add super node
-      addNodeAtPosition(hierarchy.superNode, x, y);
-      const superNodeId = nodeId - 1;
-      y += 100;
-      
-      // Add level 1 nodes (subjects)
-      hierarchy.level1.forEach((subject, i) => {
-        addNodeAtPosition(subject, x + (i * 200), y);
-        const subjectNodeId = nodeId - 1;
-        editor.addConnection(superNodeId, subjectNodeId, "output_1", "input_1");
-        
-        // Add level 2 nodes (topics) for this subject
-        const subjectTopics = hierarchy.level2.filter((_, idx) => 
-          idx >= i * 2 && idx < (i + 1) * 2
-        );
-        
-        subjectTopics.forEach((topic, j) => {
-          addNodeAtPosition(topic, x + (i * 200) + (j * 100), y + 100);
-          const topicNodeId = nodeId - 1;
-          editor.addConnection(subjectNodeId, topicNodeId, "output_1", "input_1");
-          
-          // Add level 3 nodes (subtopics) for this topic
-          const topicSubtopics = hierarchy.level3.filter((_, idx) => 
-            idx >= (i * 4 + j * 2) && idx < (i * 4 + (j + 1) * 2)
-          );
-          
-          topicSubtopics.forEach((subtopic, k) => {
-            addNodeAtPosition(subtopic, x + (i * 200) + (j * 100) + (k * 50), y + 200);
-            const subtopicNodeId = nodeId - 1;
-            editor.addConnection(topicNodeId, subtopicNodeId, "output_1", "input_1");
-          });
-        });
-      });
-    }
-  </script>
-</body>
-</html>
+    except Exception as e:
