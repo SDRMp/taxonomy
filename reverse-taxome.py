@@ -13,7 +13,7 @@ col1, col2 = st.columns(2)
 with col1:
     dpi = st.slider("🖨️ Export DPI (higher = better quality)", min_value=100, max_value=600, value=300, step=50)
 with col2:
-    display_scale = st.slider("🖥️ Display Scale (smaller = fits screen)", min_value=0.1, max_value=1.0, value=0.5, step=0.1)
+    display_scale = st.slider("🖥️ Display Scale (smaller = fits screen)", min_value=0.001, max_value= 0.01, value=0.5, step=0.1)
 
 if st.button("📊 Generate Flowchart"):
     try:
