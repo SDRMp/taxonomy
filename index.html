@@ -305,13 +305,13 @@
       const data = editor.export();
       const nodes = data.drawflow.Home.data;
       const connections = [];
-
+    
       // First build a map of all connections
       for (const id in nodes) {
         const node = nodes[id];
         const source = node.data.label || "";
         const outputs = node.outputs || {};
-
+    
         for (const out in outputs) {
           outputs[out].connections.forEach(conn => {
             const targetNode = nodes[conn.node];
@@ -320,78 +320,80 @@
           });
         }
       }
-
+    
       // Now build the hierarchy
       const hierarchy = buildHierarchy(connections);
-      const csv = convertHierarchyToCSV(hierarchy);
+      const csv = convertToStrictHierarchyCSV(hierarchy);
       
       document.getElementById("csvOutput").value = csv;
       return csv;
     }
 
     function buildHierarchy(connections) {
-      // Find root nodes (nodes that are not targets of any connection)
-      const allTargets = new Set(connections.map(c => c.target));
-      const rootNodes = [];
-      const nodeMap = {};
-      
-      // First pass: identify all nodes and root nodes
-      connections.forEach(conn => {
-        if (!allTargets.has(conn.source)) {
-          if (!rootNodes.includes(conn.source)) {
-            rootNodes.push(conn.source);
-          }
-        }
+    // Find root nodes (nodes that are not targets of any connection)
+        const allTargets = new Set(connections.map(c => c.target));
+        const rootNodes = [];
+        const nodeMap = {};
         
-        if (!nodeMap[conn.source]) {
-          nodeMap[conn.source] = { children: [] };
-        }
-        if (!nodeMap[conn.target]) {
-          nodeMap[conn.target] = { children: [] };
-        }
-      });
-      
-      // Second pass: build the tree structure
-      connections.forEach(conn => {
-        nodeMap[conn.source].children.push(conn.target);
-      });
-      
-      return {
-        roots: rootNodes,
-        nodes: nodeMap
-      };
-    }
+        // First pass: identify all nodes and root nodes
+        connections.forEach(conn => {
+          if (!allTargets.has(conn.source)) {
+            if (!rootNodes.includes(conn.source)) {
+              rootNodes.push(conn.source);
+            }
+          }
+          
+          if (!nodeMap[conn.source]) {
+            nodeMap[conn.source] = { children: [] };
+          }
+          if (!nodeMap[conn.target]) {
+            nodeMap[conn.target] = { children: [] };
+          }
+        });
+        
+        // Second pass: build the tree structure
+        connections.forEach(conn => {
+          nodeMap[conn.source].children.push(conn.target);
+        });
+        
+        return {
+          roots: rootNodes,
+          nodes: nodeMap
+        };
+      }
 
-    function convertHierarchyToCSV(hierarchy) {
+    function convertToStrictHierarchyCSV(hierarchy) {
       const rows = [];
       
       // Process each root branch
       hierarchy.roots.forEach(root => {
         const row = [];
-        let currentNodes = [root];
-        let level = 0;
         
-        while (currentNodes.length > 0) {
-          const segment = [];
-          const nextNodes = [];
-          
-          currentNodes.forEach(node => {
-            segment.push(node);
-            if (hierarchy.nodes[node] && hierarchy.nodes[node].children) {
-              nextNodes.push(...hierarchy.nodes[node].children);
-            }
+        // Start with the root node (e.g., "Education")
+        row.push(root);
+        
+        // Get all direct children (subjects) of root
+        const subjects = hierarchy.nodes[root]?.children || [];
+        row.push(subjects.join(" $$ ") || "null");
+        
+        // For each subject, get its topics
+        const subjectTopics = [];
+        subjects.forEach(subject => {
+          const topics = hierarchy.nodes[subject]?.children || [];
+          subjectTopics.push(topics.join(" @@ "));
+        });
+        row.push(subjectTopics.join(" $$ ") || "null");
+        
+        // For each topic, get its subtopics
+        const topicSubtopics = [];
+        subjects.forEach(subject => {
+          const topics = hierarchy.nodes[subject]?.children || [];
+          topics.forEach(topic => {
+            const subtopics = hierarchy.nodes[topic]?.children || [];
+            topicSubtopics.push(subtopics.join(" ^^ "));
           });
-          
-          // Add the appropriate separator based on level
-          let separator;
-          if (level === 0) separator = " $$ ";
-          else if (level === 1) separator = " @@ ";
-          else separator = " ^^ ";
-          
-          row.push(segment.join(separator));
-          currentNodes = nextNodes;
-          level++;
-        }
+        });
+        row.push(topicSubtopics.join(" @@ ") || "null");
         
         rows.push(row.join("\t"));
       });
@@ -419,7 +421,7 @@
       alert("CSV copied to clipboard!");
     }
 
-    function importCSV(event) {
+  function importCSV(event) {
       const file = event.target.files[0];
       if (!file) return;
       
@@ -429,44 +431,72 @@
         // Clear existing data
         editor.clear();
         nodeId = 1;
-        wordCategories = {};
-        allWords = [];
         
         // Process CSV content
-        const lines = content.split('\n');
+        const lines = content.split('\n').filter(line => line.trim());
         
-        // First line is headers
-        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-        
-        // Create categories from column headers
-        headers.forEach(header => {
-          wordCategories[header] = [];
-        });
-        
-        // Process data rows
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
+        lines.forEach(line => {
+          const columns = line.split('\t').map(col => col.trim());
+          if (columns.length < 4) return;
           
-          // Simple CSV parsing (handles quoted values)
-          const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
-                            .map(v => v.trim().replace(/^"|"$/g, ''));
+          const [root, subjectsStr, topicsStr, subtopicsStr] = columns;
           
-          values.forEach((value, colIndex) => {
-            if (value && headers[colIndex]) {
-              // Split hierarchical values
-              const items = value.split(/\s*\$\$\s*|\s*@@\s*|\s*\^\^\s*/).filter(Boolean);
-              items.forEach(item => {
-                if (!wordCategories[headers[colIndex]].includes(item)) {
-                  wordCategories[headers[colIndex]].push(item);
-                  allWords.push(item);
-                }
-              });
+          // Add root node if it doesn't exist
+          if (!editor.getNodeFromName(root)) {
+            addNodeAtPosition(root, 100, 100);
+          }
+          
+          // Process subjects ($$ separated)
+          const subjects = subjectsStr.split('$$').map(s => s.trim()).filter(s => s && s !== "null");
+          subjects.forEach((subject, i) => {
+            if (!editor.getNodeFromName(subject)) {
+              addNodeAtPosition(subject, 200 + i*150, 200);
+              editor.addConnection(editor.getNodeFromName(root).id, editor.getNodeFromName(subject).id, "output_1", "input_1");
             }
           });
-        }
-        
-        updateWordCategories();
+          
+          // Process topics (@@ separated within $$ groups)
+          const topicGroups = topicsStr.split('$$').map(g => g.trim());
+          let subjectIndex = 0;
+          topicGroups.forEach((topicGroup, groupIndex) => {
+            const topics = topicGroup.split('@@').map(t => t.trim()).filter(t => t && t !== "null");
+            topics.forEach((topic, i) => {
+              if (!editor.getNodeFromName(topic)) {
+                addNodeAtPosition(topic, 300 + i*150, 300 + groupIndex*100);
+                // Connect to corresponding subject
+                if (subjects[subjectIndex]) {
+                  editor.addConnection(editor.getNodeFromName(subjects[subjectIndex]).id, 
+                                   editor.getNodeFromName(topic).id, 
+                                   "output_1", "input_1");
+                }
+              }
+            });
+            subjectIndex++;
+          });
+          
+          // Process subtopics (^^ separated within @@ groups)
+          const subtopicGroups = subtopicsStr.split('@@').map(g => g.trim());
+          let topicIndex = 0;
+          subtopicGroups.forEach((subtopicGroup, groupIndex) => {
+            const subtopics = subtopicGroup.split('^^').map(s => s.trim()).filter(s => s && s !== "null");
+            subtopics.forEach((subtopic, i) => {
+              if (!editor.getNodeFromName(subtopic)) {
+                addNodeAtPosition(subtopic, 400 + i*150, 400 + groupIndex*100);
+                // Connect to corresponding topic (need to get all topics first)
+                const allTopics = [];
+                topicGroups.forEach(g => {
+                  allTopics.push(...g.split('@@').map(t => t.trim()).filter(t => t && t !== "null"));
+                });
+                if (allTopics[topicIndex]) {
+                  editor.addConnection(editor.getNodeFromName(allTopics[topicIndex]).id, 
+                                   editor.getNodeFromName(subtopic).id, 
+                                   "output_1", "input_1");
+                }
+              }
+            });
+            topicIndex++;
+          });
+        });
       };
       reader.readAsText(file);
     }
