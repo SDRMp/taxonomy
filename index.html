@@ -2,13 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>🧱 Editable Flowchart Builder</title>
+  <title>🧱 Strict Hierarchical Flowchart Builder</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/drawflow/dist/drawflow.min.css">
   <style>
-    body { font-family: sans-serif; margin: 0; padding: 0; }
+    body { 
+      font-family: sans-serif; 
+      margin: 0; 
+      padding: 0; 
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    .main-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
     #drawflow {
-      height: 80vh;
-      width: 100%;
+      height: 100%;
+      flex: 1;
       border: 2px solid #ccc;
       background: #f5f5f5;
     }
@@ -19,119 +31,489 @@
       border: 1px solid #999;
       text-align: center;
       cursor: pointer;
+      min-width: 80px;
     }
     .controls {
       padding: 10px;
       background: #f0f0f0;
       display: flex;
       gap: 10px;
+      flex-wrap: wrap;
     }
     button {
       padding: 6px 10px;
       cursor: pointer;
+    }
+    .output-container {
+      padding: 10px;
+      background: #f9f9f9;
+      border-top: 1px solid #ddd;
+    }
+    .output-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     textarea {
       width: 100%;
       height: 120px;
       font-family: monospace;
       margin-top: 10px;
+      resize: vertical;
+    }
+    .sidebar {
+      width: 250px;
+      background: #f9f9f9;
+      border-left: 1px solid #ddd;
+      overflow-y: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+    }
+    .separator-info {
+      font-size: 12px;
+      color: #666;
+      margin-top: 10px;
+      padding: 5px;
+      background: #f0f0f0;
+      border-radius: 5px;
+    }
+    .hierarchy-level {
+      margin-bottom: 15px;
+    }
+    .hierarchy-level h3 {
+      margin: 0 0 8px 0;
+      padding-bottom: 5px;
+      border-bottom: 1px solid #ddd;
+      font-size: 14px;
+      color: #555;
+    }
+    .hierarchy-item {
+      background: #e0e0e0;
+      padding: 5px 10px;
+      border-radius: 15px;
+      margin: 3px 0;
+      cursor: grab;
+      user-select: none;
+      font-size: 13px;
+    }
+    .hierarchy-item:hover {
+      background: #d0d0d0;
+    }
+    .node-type-indicator {
+      font-size: 10px;
+      color: #666;
+      display: block;
+      margin-top: 3px;
     }
   </style>
 </head>
 <body>
 
   <div class="controls">
-    <button onclick="addNode()">➕ Add Node</button>
     <button onclick="deleteSelectedNode()">❌ Delete Selected</button>
-    <button onclick="exportCSV()">📄 Copy CSV</button>
-    <button onclick="downloadCSV()">⬇️ Download CSV</button>
+    <button onclick="exportCSV()">📄 Export CSV</button>
+    <button onclick="document.getElementById('csvFile').click()">📁 Import CSV</button>
+    <button onclick="addRootNode()">➕ Add Root Node</button>
   </div>
 
-  <div id="drawflow"></div>
+  <div class="main-container">
+    <div id="drawflow"></div>
+    
+    <div class="sidebar">
+      <div class="hierarchy-level">
+        <h3>Root Nodes</h3>
+        <div id="rootNodes"></div>
+      </div>
+      
+      <div class="hierarchy-level">
+        <h3>Subjects (Level 1)</h3>
+        <div id="subjectNodes"></div>
+      </div>
+      
+      <div class="hierarchy-level">
+        <h3>Topics (Level 2)</h3>
+        <div id="topicNodes"></div>
+      </div>
+      
+      <div class="hierarchy-level">
+        <h3>Subtopics (Level 3)</h3>
+        <div id="subtopicNodes"></div>
+      </div>
+      
+      <div class="separator-info">
+        <strong>Hierarchy Separators:</strong><br>
+        $$ → Between Subjects (Level-1)<br>
+        @@ → Between Topics (Level-2)<br>
+        ^^ → Between Subtopics (Level-3)
+      </div>
+    </div>
+  </div>
 
-  <h3>📄 Exported CSV</h3>
-  <textarea id="csvOutput" readonly></textarea>
+  <div class="output-container">
+    <div class="output-header">
+      <h3>📄 Exported CSV</h3>
+      <button onclick="copyCSV()">⎘ Copy</button>
+      <button onclick="downloadCSV()">💾 Download</button>
+    </div>
+    <textarea id="csvOutput" readonly></textarea>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/drawflow"></script>
   <script>
     const editor = new Drawflow(document.getElementById("drawflow"));
     editor.start();
     let nodeId = 1;
-
-    function createNodeElement(label, id) {
+    
+    // Initialize with a default root node
+    window.onload = function() {
+      addRootNode("Education");
+      setupDragAndDrop();
+    };
+    
+    function addRootNode(name = "New Root") {
+      const htmlNode = createNodeElement(name, nodeId, "root");
+      editor.addNode(
+        "root", 0, 1,
+        100, 100,
+        "root", { label: name, type: "root" },
+        htmlNode.outerHTML
+      );
+      nodeId++;
+      updateSidebar();
+    }
+    
+    function addSubjectNode(name = "New Subject", parentId = null) {
+      const position = getNewNodePosition();
+      const htmlNode = createNodeElement(name, nodeId, "subject");
+      editor.addNode(
+        "subject", 1, 1,
+        position.x, position.y,
+        "subject", { label: name, type: "subject" },
+        htmlNode.outerHTML
+      );
+      
+      if (parentId) {
+        editor.addConnection(parentId, nodeId, "output_1", "input_1");
+      }
+      
+      nodeId++;
+      updateSidebar();
+    }
+    
+    function addTopicNode(name = "New Topic", parentId = null) {
+      const position = getNewNodePosition();
+      const htmlNode = createNodeElement(name, nodeId, "topic");
+      editor.addNode(
+        "topic", 1, 1,
+        position.x, position.y,
+        "topic", { label: name, type: "topic" },
+        htmlNode.outerHTML
+      );
+      
+      if (parentId) {
+        editor.addConnection(parentId, nodeId, "output_1", "input_1");
+      }
+      
+      nodeId++;
+      updateSidebar();
+    }
+    
+    function addSubtopicNode(name = "New Subtopic", parentId = null) {
+      const position = getNewNodePosition();
+      const htmlNode = createNodeElement(name, nodeId, "subtopic");
+      editor.addNode(
+        "subtopic", 1, 0,
+        position.x, position.y,
+        "subtopic", { label: name, type: "subtopic" },
+        htmlNode.outerHTML
+      );
+      
+      if (parentId) {
+        editor.addConnection(parentId, nodeId, "output_1", "input_1");
+      }
+      
+      nodeId++;
+      updateSidebar();
+    }
+    
+    function getNewNodePosition() {
+      const nodes = Object.values(editor.getNodesFromName(""));
+      const lastNode = nodes[nodes.length - 1];
+      return {
+        x: lastNode ? lastNode.pos_x + 150 : 100,
+        y: lastNode ? lastNode.pos_y + 100 : 100
+      };
+    }
+    
+    function createNodeElement(label, id, type) {
       const div = document.createElement("div");
       div.className = "node";
-      div.innerText = label;
+      div.innerHTML = `${label}<span class="node-type-indicator">${type}</span>`;
       div.contentEditable = true;
       div.onblur = () => {
         const data = editor.getNodeFromId(id);
-        data.data.label = div.innerText;
+        data.data.label = div.innerText.replace(type, "").trim();
+        updateSidebar();
       };
       return div;
     }
-
-    function addNode() {
-      const label = prompt("Enter node label:", `Node ${nodeId}`);
-      if (label) {
-        const htmlNode = createNodeElement(label, nodeId);
-        editor.addNode(
-          "node", 1, 1,
-          100 + nodeId * 30, 100 + nodeId * 20,
-          "node", { label },
-          htmlNode.outerHTML
-        );
-        nodeId++;
-      }
-    }
-
+    
     function deleteSelectedNode() {
-      const selected = editor.getSelectedNodes();
-      if (selected.length > 0) {
-        editor.removeNodeId(selected[0]);
+      const selected = editor.selected_node;
+      if (selected) {
+        editor.removeNodeId(selected);
+        updateSidebar();
       } else {
         alert("Select a node to delete.");
       }
     }
-
+    
+    function updateSidebar() {
+      const nodes = Object.values(editor.getNodesFromName(""));
+      
+      const rootNodes = nodes.filter(n => n.data.type === "root");
+      const subjectNodes = nodes.filter(n => n.data.type === "subject");
+      const topicNodes = nodes.filter(n => n.data.type === "topic");
+      const subtopicNodes = nodes.filter(n => n.data.type === "subtopic");
+      
+      document.getElementById("rootNodes").innerHTML = rootNodes
+        .map(n => `<div class="hierarchy-item" draggable="true" data-id="${n.id}">${n.data.label}</div>`)
+        .join("");
+      
+      document.getElementById("subjectNodes").innerHTML = subjectNodes
+        .map(n => `<div class="hierarchy-item" draggable="true" data-id="${n.id}">${n.data.label}</div>`)
+        .join("");
+      
+      document.getElementById("topicNodes").innerHTML = topicNodes
+        .map(n => `<div class="hierarchy-item" draggable="true" data-id="${n.id}">${n.data.label}</div>`)
+        .join("");
+      
+      document.getElementById("subtopicNodes").innerHTML = subtopicNodes
+        .map(n => `<div class="hierarchy-item" draggable="true" data-id="${n.id}">${n.data.label}</div>`)
+        .join("");
+      
+      setupDragAndDrop();
+    }
+    
+    function setupDragAndDrop() {
+      const items = document.querySelectorAll('.hierarchy-item');
+      items.forEach(item => {
+        item.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('text/plain', item.textContent);
+          e.dataTransfer.setData('node-id', item.dataset.id);
+          e.dataTransfer.effectAllowed = 'copy';
+        });
+      });
+      
+      const drawflowEl = document.getElementById('drawflow');
+      drawflowEl.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      });
+      
+      drawflowEl.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const label = e.dataTransfer.getData('text/plain');
+        const nodeId = e.dataTransfer.getData('node-id');
+        
+        if (nodeId) {
+          const node = editor.getNodeFromId(parseInt(nodeId));
+          const rect = drawflowEl.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          
+          // Clone the node
+          if (node.data.type === "root") addRootNode(label + " (Copy)");
+          if (node.data.type === "subject") addSubjectNode(label + " (Copy)", null);
+          if (node.data.type === "topic") addTopicNode(label + " (Copy)", null);
+          if (node.data.type === "subtopic") addSubtopicNode(label + " (Copy)", null);
+        }
+      });
+    }
+    
     function exportCSV() {
       const data = editor.export();
       const nodes = data.drawflow.Home.data;
+      const connections = [];
 
-      const rows = [];
+      // Build connection map
       for (const id in nodes) {
         const node = nodes[id];
-        const label = node.data.label || "";
+        const source = node.data.label || "";
         const outputs = node.outputs || {};
-        const connections = [];
 
         for (const out in outputs) {
           outputs[out].connections.forEach(conn => {
             const targetNode = nodes[conn.node];
-            connections.push(targetNode?.data?.label || "Unknown");
+            const target = targetNode?.data?.label || "Unknown";
+            connections.push({source, target});
           });
         }
-
-        rows.push(`${label}\t${connections.join(", ")}`);
       }
 
-      const csv = rows.join("\n");
+      // Build hierarchy
+      const hierarchy = buildHierarchy(connections);
+      const csv = convertHierarchyToCSV(hierarchy);
+      
       document.getElementById("csvOutput").value = csv;
+      return csv;
+    }
+    
+    function buildHierarchy(connections) {
+      const allTargets = new Set(connections.map(c => c.target));
+      const rootNodes = [];
+      const nodeMap = {};
+      
+      // Identify all nodes and root nodes
+      connections.forEach(conn => {
+        if (!allTargets.has(conn.source)) {
+          if (!rootNodes.includes(conn.source)) {
+            rootNodes.push(conn.source);
+          }
+        }
+        
+        if (!nodeMap[conn.source]) {
+          nodeMap[conn.source] = { children: [] };
+        }
+        if (!nodeMap[conn.target]) {
+          nodeMap[conn.target] = { children: [] };
+        }
+      });
+      
+      // Build tree structure
+      connections.forEach(conn => {
+        nodeMap[conn.source].children.push(conn.target);
+      });
+      
+      return {
+        roots: rootNodes,
+        nodes: nodeMap
+      };
     }
 
+    function convertHierarchyToCSV(hierarchy) {
+      const rows = [];
+
+      hierarchy.roots.forEach(root => {
+        // Get all subjects (direct children of root)
+        const subjects = hierarchy.nodes[root]?.children || [];
+        
+        // Get topics grouped by their parent subjects
+        const subjectTopicGroups = subjects.map(subject => {
+          return hierarchy.nodes[subject]?.children || [];
+        });
+        
+        // Get subtopics grouped by their parent topics
+        const topicSubtopicGroups = subjectTopicGroups.flatMap(topics => {
+          return topics.map(topic => hierarchy.nodes[topic]?.children || []);
+        });
+
+        // Build each level with mandatory delimiters
+        const subjectLevel = subjects.length > 0 ? subjects.join(" $$ ") : "null";
+        
+        // Topic level format: Subject1Topics @@ Subject2Topics $$ Subject3Topics
+        let topicLevel = subjectTopicGroups.map(topics => 
+          topics.length > 0 ? topics.join(" @@ ") : "null"
+        ).join(" $$ ");
+        
+        // Subtopic level format: Topic1Subtopics ^^ Topic2Subtopics @@ Topic3Subtopics ^^ Topic4Subtopics
+        let subtopicLevel = topicSubtopicGroups.map(subtopics => 
+          subtopics.length > 0 ? subtopics.join(" ^^ ") : "null"
+        ).join(" @@ ");
+
+        // Ensure we always have all delimiters
+        if (subjectTopicGroups.length <= 1) topicLevel = topicLevel.includes("$$") ? topicLevel : "null $$ " + topicLevel;
+        if (topicSubtopicGroups.length <= 1) subtopicLevel = subtopicLevel.includes("@@") ? subtopicLevel : "null @@ " + subtopicLevel;
+
+        const row = [root, subjectLevel, topicLevel, subtopicLevel].join("\t");
+        rows.push(row);
+      });
+
+      return rows.join("\n");
+    }
+    
     function downloadCSV() {
-      exportCSV();
-      const csv = document.getElementById("csvOutput").value;
+      const csv = exportCSV();
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "flowchart.csv";
+      a.download = "hierarchy.csv";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
     }
-  </script>
+    
+    function copyCSV() {
+      exportCSV();
+      const csvOutput = document.getElementById("csvOutput");
+      csvOutput.select();
+      document.execCommand("copy");
+      alert("CSV copied to clipboard!");
+    }
 
+    function importCSV(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const content = e.target.result;
+        
+        // Clear existing data
+        editor.clear();
+        nodeId = 1;
+        
+        const lines = content.split('\n').filter(line => line.trim());
+        
+        lines.forEach((line, lineIndex) => {
+          const columns = line.split('\t').map(col => col.trim());
+          if (columns.length < 4) return;
+          
+          const [root, subjectsStr, topicsStr, subtopicsStr] = columns;
+          
+          // Add root node
+          addRootNode(root);
+          const rootNode = editor.getNodeFromName(root);
+          
+          // Process subjects
+          const subjectGroups = subjectsStr.split('$$').map(s => s.trim()).filter(s => s && s !== "null");
+          const subjectNodes = [];
+          subjectGroups.forEach(subject => {
+            addSubjectNode(subject, rootNode.id);
+            subjectNodes.push(editor.getNodeFromName(subject));
+          });
+          
+          // Process topics
+          const topicGroups = topicsStr.split('$$').map(g => g.trim());
+          const topicNodes = [];
+          topicGroups.forEach((group, groupIndex) => {
+            const topics = group.split('@@').map(t => t.trim()).filter(t => t && t !== "null");
+            topics.forEach(topic => {
+              const parentSubject = subjectNodes[groupIndex];
+              if (parentSubject) {
+                addTopicNode(topic, parentSubject.id);
+                topicNodes.push(editor.getNodeFromName(topic));
+              }
+            });
+          });
+          
+          // Process subtopics
+          const subtopicGroups = subtopicsStr.split('@@').map(g => g.trim());
+          subtopicGroups.forEach((group, groupIndex) => {
+            const subtopics = group.split('^^').map(s => s.trim()).filter(s => s && s !== "null");
+            subtopics.forEach(subtopic => {
+              const parentTopic = topicNodes[groupIndex];
+              if (parentTopic) {
+                addSubtopicNode(subtopic, parentTopic.id);
+              }
+            });
+          });
+        });
+      };
+      reader.readAsText(file);
+    }
+  </script>
 </body>
 </html>
- 
