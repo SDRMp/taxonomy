@@ -122,7 +122,7 @@
 <body>
 
   <div class="controls">
-     
+    <button onclick="deleteSelectedNode()">❌ Delete Selected</button>
     <button onclick="exportCSV()">📄 Export CSV</button>
     <button onclick="document.getElementById('csvFile').click()">📁 Import CSV</button>
     <input type="file" id="csvFile" accept=".csv" style="display:none" onchange="importCSV(event)">
