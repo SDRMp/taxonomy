@@ -362,44 +362,42 @@
       };
     }
 
-    function convertHierarchyToCSV(hierarchy) {
-        const rows = [];
-      
-        function dfs(node, path) {
-          path.push(node);
-          const children = hierarchy.nodes[node]?.children || [];
-          
-          if (children.length === 0) {
-            // Leaf node: complete path
-            rows.push([...path]);
-          } else {
-            children.forEach(child => dfs(child, [...path]));
-          }
+ function convertHierarchyToCSV(hierarchy) {
+      const rows = [];
+    
+      function traverse(node, path) {
+        path.push(node);
+        const children = hierarchy.nodes[node]?.children;
+        if (!children || children.length === 0) {
+          // Leaf node → push full path as a CSV row
+          rows.push([...path]);
+        } else {
+          children.forEach(child => traverse(child, [...path])); // clone path
         }
-      
-        hierarchy.roots.forEach(root => {
-          dfs(root, []);
-        });
-      
-        // Rebuild CSV string using delimiters
-        let subjects = [];
-        let topics = [];
-        let subtopics = [];
-      
-        for (const row of rows) {
-          subjects.push(row[0] || 'null');
-          topics.push(row[1] || 'null');
-          subtopics.push(row[2] || 'null');
-        }
-      
-        // Use your hierarchy delimiters
-        return [
-          "Education",
-          [...new Set(subjects)].join(" $$ "),
-          [...new Set(topics)].join(" @@ "),
-          [...new Set(subtopics)].join(" ^^ ")
-        ].join("\t");
       }
+    
+      hierarchy.roots.forEach(root => {
+        traverse(root, []);
+      });
+    
+      // Build final CSV string
+      const formattedRows = rows.map(path => {
+        // Build levels
+        const level1 = path[0] || "null";  // Subject
+        const level2 = path[1] || "null";  // Topic
+        const level3 = path[2] || "null";  // Subtopic
+        const level4 = path[3] || "null";  // Sub-subtopic
+    
+        return [
+          level1,
+          level1 + " $$ " + (path[1] || "null"),
+          (path[1] || "null") + " @@ " + (path[2] || "null"),
+          (path[2] || "null") + " ^^ " + (path[3] || "null")
+        ].join("\t");
+      });
+    
+      return formattedRows.join("\n");
+    }
 
 
     function downloadCSV() {
