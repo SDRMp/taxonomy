@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>🧱 Strict Hierarchical Flowchart Builder</title>
+  <title>🧱 Hierarchical Flowchart Builder</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/drawflow/dist/drawflow.min.css">
   <style>
     body { 
@@ -70,25 +70,17 @@
       display: flex;
       flex-direction: column;
     }
-    .separator-info {
-      font-size: 12px;
-      color: #666;
-      margin-top: 10px;
-      padding: 5px;
-      background: #f0f0f0;
-      border-radius: 5px;
-    }
-    .hierarchy-level {
+    .word-category {
       margin-bottom: 15px;
     }
-    .hierarchy-level h3 {
+    .word-category h3 {
       margin: 0 0 8px 0;
       padding-bottom: 5px;
       border-bottom: 1px solid #ddd;
       font-size: 14px;
       color: #555;
     }
-    .hierarchy-item {
+    .word-item {
       background: #e0e0e0;
       padding: 5px 10px;
       border-radius: 15px;
@@ -97,14 +89,33 @@
       user-select: none;
       font-size: 13px;
     }
-    .hierarchy-item:hover {
+    .word-item:hover {
       background: #d0d0d0;
     }
-    .node-type-indicator {
-      font-size: 10px;
+    .add-word {
+      display: flex;
+      gap: 5px;
+      padding: 10px;
+      background: #f0f0f0;
+      border-top: 1px solid #ddd;
+      margin-top: auto;
+    }
+    #newWord {
+      flex: 1;
+      padding: 5px;
+    }
+    #categorySelect {
+      padding: 5px;
+      margin-bottom: 5px;
+      width: 100%;
+    }
+    .separator-info {
+      font-size: 12px;
       color: #666;
-      display: block;
-      margin-top: 3px;
+      margin-top: 10px;
+      padding: 5px;
+      background: #f0f0f0;
+      border-radius: 5px;
     }
   </style>
 </head>
@@ -115,38 +126,28 @@
     <button onclick="exportCSV()">📄 Export CSV</button>
     <button onclick="document.getElementById('csvFile').click()">📁 Import CSV</button>
     <input type="file" id="csvFile" accept=".csv" style="display:none" onchange="importCSV(event)">
-    <button onclick="addRootNode()">➕ Add Root Node</button>
   </div>
 
   <div class="main-container">
     <div id="drawflow"></div>
     
-    <div class="sidebar">
-      <div class="hierarchy-level">
-        <h3>Root Nodes</h3>
-        <div id="rootNodes"></div>
-      </div>
+    <div class="sidebar" id="sidebar">
+      <select id="categorySelect" onchange="filterCategory()">
+        <option value="all">All Categories</option>
+      </select>
       
-      <div class="hierarchy-level">
-        <h3>Subjects (Level 1)</h3>
-        <div id="subjectNodes"></div>
-      </div>
-      
-      <div class="hierarchy-level">
-        <h3>Topics (Level 2)</h3>
-        <div id="topicNodes"></div>
-      </div>
-      
-      <div class="hierarchy-level">
-        <h3>Subtopics (Level 3)</h3>
-        <div id="subtopicNodes"></div>
-      </div>
+      <div id="wordCategories"></div>
       
       <div class="separator-info">
         <strong>Hierarchy Separators:</strong><br>
         $$ → Between Subjects (Level-1)<br>
         @@ → Between Topics (Level-2)<br>
         ^^ → Between Subtopics (Level-3)
+      </div>
+      
+      <div class="add-word">
+        <input type="text" id="newWord" placeholder="New word">
+        <button onclick="addNewWord()">Add</button>
       </div>
     </div>
   </div>
@@ -155,7 +156,6 @@
     <div class="output-header">
       <h3>📄 Exported CSV</h3>
       <button onclick="copyCSV()">⎘ Copy</button>
-      <button onclick="downloadCSV()">💾 Download</button>
     </div>
     <textarea id="csvOutput" readonly></textarea>
   </div>
@@ -165,298 +165,243 @@
     const editor = new Drawflow(document.getElementById("drawflow"));
     editor.start();
     let nodeId = 1;
-    
-    // Initialize with a default root node
-    window.onload = function() {
-      addRootNode("Education");
-      setupDragAndDrop();
-    };
-    
-    function addRootNode(name = "New Root") {
-      const htmlNode = createNodeElement(name, nodeId, "root");
-      editor.addNode(
-        "root", 0, 1,
-        100, 100,
-        "root", { label: name, type: "root" },
-        htmlNode.outerHTML
-      );
-      nodeId++;
-      updateSidebar();
-    }
-    
-    function addSubjectNode(name = "New Subject", parentId = null) {
-      const position = getNewNodePosition();
-      const htmlNode = createNodeElement(name, nodeId, "subject");
-      editor.addNode(
-        "subject", 1, 1,
-        position.x, position.y,
-        "subject", { label: name, type: "subject" },
-        htmlNode.outerHTML
-      );
-      
-      if (parentId) {
-        editor.addConnection(parentId, nodeId, "output_1", "input_1");
-      }
-      
-      nodeId++;
-      updateSidebar();
-    }
-    
-    function addTopicNode(name = "New Topic", parentId = null) {
-      const position = getNewNodePosition();
-      const htmlNode = createNodeElement(name, nodeId, "topic");
-      editor.addNode(
-        "topic", 1, 1,
-        position.x, position.y,
-        "topic", { label: name, type: "topic" },
-        htmlNode.outerHTML
-      );
-      
-      if (parentId) {
-        editor.addConnection(parentId, nodeId, "output_1", "input_1");
-      }
-      
-      nodeId++;
-      updateSidebar();
-    }
-    
-    function addSubtopicNode(name = "New Subtopic", parentId = null) {
-      const position = getNewNodePosition();
-      const htmlNode = createNodeElement(name, nodeId, "subtopic");
-      editor.addNode(
-        "subtopic", 1, 0,
-        position.x, position.y,
-        "subtopic", { label: name, type: "subtopic" },
-        htmlNode.outerHTML
-      );
-      
-      if (parentId) {
-        editor.addConnection(parentId, nodeId, "output_1", "input_1");
-      }
-      
-      nodeId++;
-      updateSidebar();
-    }
-    
-    function getNewNodePosition() {
-      const nodes = Object.values(editor.getNodesFromName(""));
-      const lastNode = nodes[nodes.length - 1];
-      return {
-        x: lastNode ? lastNode.pos_x + 150 : 100,
-        y: lastNode ? lastNode.pos_y + 100 : 100
-      };
-    }
-    
-    function createNodeElement(label, id, type) {
-      const div = document.createElement("div");
-      div.className = "node";
-      div.innerHTML = `${label}<span class="node-type-indicator">${type}</span>`;
-      div.contentEditable = true;
-      div.onblur = () => {
-        const data = editor.getNodeFromId(id);
-        data.data.label = div.innerText.replace(type, "").trim();
-        updateSidebar();
-      };
-      return div;
-    }
-    
-    function deleteSelectedNode() {
-      const selected = editor.selected_node;
-      if (selected) {
-        editor.removeNodeId(selected);
-        updateSidebar();
-      } else {
-        alert("Select a node to delete.");
-      }
-    }
-    
-    function updateSidebar() {
-      const nodes = Object.values(editor.getNodesFromName(""));
-      
-      const rootNodes = nodes.filter(n => n.data.type === "root");
-      const subjectNodes = nodes.filter(n => n.data.type === "subject");
-      const topicNodes = nodes.filter(n => n.data.type === "topic");
-      const subtopicNodes = nodes.filter(n => n.data.type === "subtopic");
-      
-      document.getElementById("rootNodes").innerHTML = rootNodes
-        .map(n => `<div class="hierarchy-item" draggable="true" data-id="${n.id}">${n.data.label}</div>`)
-        .join("");
-      
-      document.getElementById("subjectNodes").innerHTML = subjectNodes
-        .map(n => `<div class="hierarchy-item" draggable="true" data-id="${n.id}">${n.data.label}</div>`)
-        .join("");
-      
-      document.getElementById("topicNodes").innerHTML = topicNodes
-        .map(n => `<div class="hierarchy-item" draggable="true" data-id="${n.id}">${n.data.label}</div>`)
-        .join("");
-      
-      document.getElementById("subtopicNodes").innerHTML = subtopicNodes
-        .map(n => `<div class="hierarchy-item" draggable="true" data-id="${n.id}">${n.data.label}</div>`)
-        .join("");
-      
-      setupDragAndDrop();
-    }
-    
+    let wordCategories = {};
+    let allWords = [];
+
+    // Initialize drag and drop
     function setupDragAndDrop() {
-      const items = document.querySelectorAll('.hierarchy-item');
-      items.forEach(item => {
+      const wordItems = document.querySelectorAll('.word-item');
+      wordItems.forEach(item => {
+        item.draggable = true;
+        
         item.addEventListener('dragstart', (e) => {
           e.dataTransfer.setData('text/plain', item.textContent);
-          e.dataTransfer.setData('node-id', item.dataset.id);
           e.dataTransfer.effectAllowed = 'copy';
         });
       });
-      
+
+      // Handle drop on the editor
       const drawflowEl = document.getElementById('drawflow');
       drawflowEl.addEventListener('dragover', (e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
       });
-      
+
       drawflowEl.addEventListener('drop', (e) => {
         e.preventDefault();
-        const label = e.dataTransfer.getData('text/plain');
-        const nodeId = e.dataTransfer.getData('node-id');
-        
-        if (nodeId) {
-          const node = editor.getNodeFromId(parseInt(nodeId));
+        const word = e.dataTransfer.getData('text/plain');
+        if (word) {
           const rect = drawflowEl.getBoundingClientRect();
           const x = e.clientX - rect.left;
           const y = e.clientY - rect.top;
-          
-          // Clone the node
-          if (node.data.type === "root") addRootNode(label + " (Copy)");
-          if (node.data.type === "subject") addSubjectNode(label + " (Copy)", null);
-          if (node.data.type === "topic") addTopicNode(label + " (Copy)", null);
-          if (node.data.type === "subtopic") addSubtopicNode(label + " (Copy)", null);
+          addNodeAtPosition(word, x, y);
         }
       });
     }
-    
+
+    function addNodeAtPosition(label, x, y) {
+      const htmlNode = createNodeElement(label, nodeId);
+      editor.addNode(
+        "node", 1, 1,
+        x, y,
+        "node", { label },
+        htmlNode.outerHTML
+      );
+      nodeId++;
+    }
+
+    function updateWordCategories() {
+      const container = document.getElementById('wordCategories');
+      container.innerHTML = '';
+      
+      const categorySelect = document.getElementById('categorySelect');
+      // Keep "All Categories" option
+      while (categorySelect.options.length > 1) {
+        categorySelect.remove(1);
+      }
+      
+      for (const [category, words] of Object.entries(wordCategories)) {
+        // Add to category dropdown
+        const option = document.createElement('option');
+        option.value = category;
+        option.textContent = category;
+        categorySelect.appendChild(option);
+        
+        const categoryDiv = document.createElement('div');
+        categoryDiv.className = 'word-category';
+        categoryDiv.dataset.category = category;
+        
+        const header = document.createElement('h3');
+        header.textContent = category;
+        categoryDiv.appendChild(header);
+        
+        words.forEach(word => {
+          const wordDiv = document.createElement('div');
+          wordDiv.className = 'word-item';
+          wordDiv.textContent = word;
+          wordDiv.draggable = true;
+          categoryDiv.appendChild(wordDiv);
+        });
+        
+        container.appendChild(categoryDiv);
+      }
+      
+      setupDragAndDrop();
+    }
+
+    function filterCategory() {
+      const selectedCategory = document.getElementById('categorySelect').value;
+      const categories = document.querySelectorAll('.word-category');
+      
+      categories.forEach(cat => {
+        if (selectedCategory === 'all' || cat.dataset.category === selectedCategory) {
+          cat.style.display = 'block';
+        } else {
+          cat.style.display = 'none';
+        }
+      });
+    }
+
+    function addNewWord() {
+      const newWord = document.getElementById('newWord').value.trim();
+      if (newWord) {
+        // Add to "Custom" category
+        if (!wordCategories['Custom']) {
+          wordCategories['Custom'] = [];
+        }
+        
+        if (!wordCategories['Custom'].includes(newWord)) {
+          wordCategories['Custom'].push(newWord);
+          allWords.push(newWord);
+          updateWordCategories();
+        }
+        
+        document.getElementById('newWord').value = '';
+      }
+    }
+
+    function createNodeElement(label, id) {
+      const div = document.createElement("div");
+      div.className = "node";
+      div.innerText = label;
+      div.contentEditable = true;
+      div.onblur = () => {
+        const data = editor.getNodeFromId(id);
+        data.data.label = div.innerText;
+      };
+      return div;
+    }
+
+    function deleteSelectedNode() {
+      const selected = editor.selected_node;
+      if (selected) {
+        editor.removeNodeId(selected);
+      } else {
+        alert("Select a node to delete.");
+      }
+    }
+
     function exportCSV() {
       const data = editor.export();
       const nodes = data.drawflow.Home.data;
-      
-      // Find all root nodes
-      const rootNodes = Object.values(nodes).filter(n => n.data.type === "root");
-      
-      const csvLines = [];
-      
-      rootNodes.forEach(rootNode => {
-        const row = [rootNode.data.label];
-        
-        // Get subjects (direct children of root)
-        const subjects = getConnectedNodes(nodes, rootNode.id, 'output');
-        row.push(subjects.map(s => s.data.label).join(" $$ ") || "null");
-        
-        // Get topics (children of subjects)
-        const subjectTopics = [];
-        subjects.forEach(subject => {
-          const topics = getConnectedNodes(nodes, subject.id, 'output');
-          subjectTopics.push(topics.map(t => t.data.label).join(" @@ ") || "null");
-        });
-        row.push(subjectTopics.join(" $$ ") || "null");
-        
-        // Get subtopics (children of topics)
-        const topicSubtopics = [];
-        subjects.forEach(subject => {
-          const topics = getConnectedNodes(nodes, subject.id, 'output');
-          topics.forEach(topic => {
-            const subtopics = getConnectedNodes(nodes, topic.id, 'output');
-            topicSubtopics.push(subtopics.map(s => s.data.label).join(" ^^ ") || "null");
+      const connections = [];
+
+      // First build a map of all connections
+      for (const id in nodes) {
+        const node = nodes[id];
+        const source = node.data.label || "";
+        const outputs = node.outputs || {};
+
+        for (const out in outputs) {
+          outputs[out].connections.forEach(conn => {
+            const targetNode = nodes[conn.node];
+            const target = targetNode?.data?.label || "Unknown";
+            connections.push({source, target});
           });
-        });
-        row.push(topicSubtopics.join(" @@ ") || "null");
-        
-        csvLines.push(row.join("\t"));
-      });
+        }
+      }
+
+      // Now build the hierarchy
+      const hierarchy = buildHierarchy(connections);
+      const csv = convertHierarchyToCSV(hierarchy);
       
-      const csv = csvLines.join("\n");
       document.getElementById("csvOutput").value = csv;
       return csv;
     }
-    
-    function getConnectedNodes(allNodes, nodeId, direction) {
-      const node = allNodes[nodeId];
-      if (!node) return [];
+
+    function buildHierarchy(connections) {
+      // Find root nodes (nodes that are not targets of any connection)
+      const allTargets = new Set(connections.map(c => c.target));
+      const rootNodes = [];
+      const nodeMap = {};
       
-      const connectedNodes = [];
-      const outputs = direction === 'output' ? node.outputs : node.inputs;
-      
-      for (const output in outputs) {
-        outputs[output].connections.forEach(conn => {
-          const targetNode = allNodes[conn.node];
-          if (targetNode) {
-            connectedNodes.push(targetNode);
+      // First pass: identify all nodes and root nodes
+      connections.forEach(conn => {
+        if (!allTargets.has(conn.source)) {
+          if (!rootNodes.includes(conn.source)) {
+            rootNodes.push(conn.source);
           }
-        });
-      }
+        }
+        
+        if (!nodeMap[conn.source]) {
+          nodeMap[conn.source] = { children: [] };
+        }
+        if (!nodeMap[conn.target]) {
+          nodeMap[conn.target] = { children: [] };
+        }
+      });
       
-      return connectedNodes;
-    }
-    
-    function importCSV(event) {
-      const file = event.target.files[0];
-      if (!file) return;
+      // Second pass: build the tree structure
+      connections.forEach(conn => {
+        nodeMap[conn.source].children.push(conn.target);
+      });
       
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const content = e.target.result;
-        
-        // Clear existing data
-        editor.clear();
-        nodeId = 1;
-        
-        const lines = content.split('\n').filter(line => line.trim());
-        
-        lines.forEach((line, lineIndex) => {
-          const columns = line.split('\t').map(col => col.trim());
-          if (columns.length < 4) return;
-          
-          const [root, subjectsStr, topicsStr, subtopicsStr] = columns;
-          
-          // Add root node
-          addRootNode(root);
-          const rootNode = editor.getNodeFromName(root);
-          
-          // Process subjects
-          const subjectGroups = subjectsStr.split('$$').map(s => s.trim()).filter(s => s && s !== "null");
-          const subjectNodes = [];
-          subjectGroups.forEach(subject => {
-            addSubjectNode(subject, rootNode.id);
-            subjectNodes.push(editor.getNodeFromName(subject));
-          });
-          
-          // Process topics
-          const topicGroups = topicsStr.split('$$').map(g => g.trim());
-          const topicNodes = [];
-          topicGroups.forEach((group, groupIndex) => {
-            const topics = group.split('@@').map(t => t.trim()).filter(t => t && t !== "null");
-            topics.forEach(topic => {
-              const parentSubject = subjectNodes[groupIndex];
-              if (parentSubject) {
-                addTopicNode(topic, parentSubject.id);
-                topicNodes.push(editor.getNodeFromName(topic));
-              }
-            });
-          });
-          
-          // Process subtopics
-          const subtopicGroups = subtopicsStr.split('@@').map(g => g.trim());
-          subtopicGroups.forEach((group, groupIndex) => {
-            const subtopics = group.split('^^').map(s => s.trim()).filter(s => s && s !== "null");
-            subtopics.forEach(subtopic => {
-              const parentTopic = topicNodes[groupIndex];
-              if (parentTopic) {
-                addSubtopicNode(subtopic, parentTopic.id);
-              }
-            });
-          });
-        });
+      return {
+        roots: rootNodes,
+        nodes: nodeMap
       };
-      reader.readAsText(file);
     }
-    
+
+    function convertHierarchyToCSV(hierarchy) {
+        const rows = [];
+      
+        function dfs(node, path) {
+          path.push(node);
+          const children = hierarchy.nodes[node]?.children || [];
+          
+          if (children.length === 0) {
+            // Leaf node: complete path
+            rows.push([...path]);
+          } else {
+            children.forEach(child => dfs(child, [...path]));
+          }
+        }
+      
+        hierarchy.roots.forEach(root => {
+          dfs(root, []);
+        });
+      
+        // Rebuild CSV string using delimiters
+        let subjects = [];
+        let topics = [];
+        let subtopics = [];
+      
+        for (const row of rows) {
+          subjects.push(row[0] || 'null');
+          topics.push(row[1] || 'null');
+          subtopics.push(row[2] || 'null');
+        }
+      
+        // Use your hierarchy delimiters
+        return [
+          "Education",
+          [...new Set(subjects)].join(" $$ "),
+          [...new Set(topics)].join(" @@ "),
+          [...new Set(subtopics)].join(" ^^ ")
+        ].join("\t");
+      }
+
+
     function downloadCSV() {
       const csv = exportCSV();
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -468,7 +413,7 @@
       a.click();
       document.body.removeChild(a);
     }
-    
+
     function copyCSV() {
       exportCSV();
       const csvOutput = document.getElementById("csvOutput");
@@ -476,6 +421,58 @@
       document.execCommand("copy");
       alert("CSV copied to clipboard!");
     }
+
+    function importCSV(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const content = e.target.result;
+        // Clear existing data
+        editor.clear();
+        nodeId = 1;
+        wordCategories = {};
+        allWords = [];
+        
+        // Process CSV content
+        const lines = content.split('\n');
+        
+        // First line is headers
+        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        
+        // Create categories from column headers
+        headers.forEach(header => {
+          wordCategories[header] = [];
+        });
+        
+        // Process data rows
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          
+          // Simple CSV parsing (handles quoted values)
+          const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
+                            .map(v => v.trim().replace(/^"|"$/g, ''));
+          
+          values.forEach((value, colIndex) => {
+            if (value && headers[colIndex]) {
+              // Split hierarchical values
+              const items = value.split(/\s*\$\$\s*|\s*@@\s*|\s*\^\^\s*/).filter(Boolean);
+              items.forEach(item => {
+                if (!wordCategories[headers[colIndex]].includes(item)) {
+                  wordCategories[headers[colIndex]].push(item);
+                  allWords.push(item);
+                }
+              });
+            }
+          });
+        }
+        
+        updateWordCategories();
+      };
+      reader.readAsText(file);
+    }
   </script>
 </body>
-</html>
+ 
